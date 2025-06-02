@@ -103,30 +103,32 @@ function appendMessageToMiniWindow(text) {
 }
 
 // == Получение новых сообщений ==
+
 async function getNewAnswersFromTelegram() {
     try {
-        const url = `https://api.telegram.org/bot${telegramToken}/getUpdates?offset=${lastProcessedUpdateId + 1}`;
+        const url = `https://api.telegram.org/bot${telegramToken}/getUpdates?offset=${lastProcessedUpdateId + 1}&timeout=10`;
         const response = await fetch(url);
         const data = await response.json();
 
         if (data.ok) {
-            data.result.forEach(msg => {
+            for (const msg of data.result) {
                 const text = msg.message?.text;
                 const updateId = msg.update_id;
 
                 if (text && updateId > lastProcessedUpdateId) {
                     lastProcessedUpdateId = updateId;
-                    appendMessageToMiniWindow(text);
+                    appendMessageToMiniWindow(text); // sizning UI funksiyangiz
                 }
-            });
+            }
         }
     } catch (error) {
-        console.error("Xatolik yuz berdi:", error.message);
-    } finally {
-        // 2 soniyadan keyin qayta chaqiriladi
-        setTimeout(getNewAnswersFromTelegram, 2000);
+        console.error('Telegram bilan ulanishda xatolik:', error);
     }
+
+    // 500ms kutib, keyin yana chaqiradi
+    setTimeout(getNewAnswersFromTelegram, 500);
 }
+
 
 
 // == Обработка клавиш ==
