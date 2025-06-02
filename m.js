@@ -104,84 +104,28 @@ function appendMessageToMiniWindow(text) {
 
 // == Получение новых сообщений ==
 async function getNewAnswersFromTelegram() {
-    // timeout va allowed_updates parametrlari uzoq polling (long polling) uchun foydali
-    // Faqat 'message' va 'edited_message' turlarini so'raymiz, chunki mini-oynaga asosan shular kerak
-    const url = `https://api.telegram.org/bot${telegramToken}/getUpdates?offset=${lastProcessedUpdateId + 1}&timeout=30&allowed_updates=["message","edited_message"]`;
-    // console.log("So'rov yuborilmoqda:", url); // Test uchun
+    try {
+        const url = `https://api.telegram.org/bot${telegramToken}/getUpdates?offset=${lastProcessedUpdateId + 1}`;
+        const response = await fetch(url);
+        const data = await response.json();
 
-    try {
-        const response = await fetch(url);
+        if (data.ok) {
+            data.result.forEach(msg => {
+                const text = msg.message?.text;
+                const updateId = msg.update_id;
 
-        // Javob muvaffaqiyatli ekanligini tekshirish
-        if (!response.ok) {
-            let errorText = `Telegram API xatosi: ${response.status} ${response.statusText}`;
-            try {
-                // Xatolik javobi JSON formatida bo'lishi mumkin, unda qo'shimcha ma'lumot bo'ladi
-                const errorData = await response.json();
-                if (errorData && errorData.description) {
-                    errorText += ` - ${errorData.description}`;
-                }
-            } catch (e) {
-                // Agar xatolik javobi JSON bo'lmasa, matnini olishga harakat qilamiz
-                try {
-                    const rawErrorText = await response.text();
-                    if (rawErrorText) {
-                         errorText += ` - Javob matni: ${rawErrorText}`;
-                    }
-                } catch (textErr) {
-                    // Hech narsa qila olmasak, asl xatolik matni qoladi
-                }
-            }
-            console.error(errorText);
-
-            // Agar 409 Conflict xatoligi bo'lsa, bu odatda boshqa joydan getUpdates chaqirilayotganini bildiradi
-            if (response.status === 409) {
-                console.warn("Telegram API 409 Conflict xatosini qaytardi. Boshqa bot nusxasi yoki getUpdates so'rovi faol bo'lishi mumkin (masalan, Python botingiz). Bu JavaScript klientining yangilanishlarni olishiga xalaqit berishi mumkin.");
-            }
-            return; // Xatolik bo'lsa, funksiyadan chiqib ketamiz
-        }
-
-        const data = await response.json();
-        // console.log("Telegramdan javob:", JSON.stringify(data, null, 2)); // Test uchun
-
-        if (data.ok && data.result && Array.isArray(data.result)) { // data.result mavjudligi va massiv ekanligini tekshirish
-            let maxUpdateIdInBatch = lastProcessedUpdateId;
-
-            if (data.result.length > 0) {
-                data.result.forEach(update => { // 'update' o'zgaruvchisi har bir yangilanishni ifodalaydi
-                    // Har bir yangilanish uchun update_id ni tekshirib, eng kattasini saqlab qolamiz
-                    maxUpdateIdInBatch = Math.max(maxUpdateIdInBatch, update.update_id);
-
-                    // Xabarning o'zini olish (asosan yangi xabar yoki tahrirlangan xabar)
-                    const messageObject = update.message || update.edited_message;
-
-                    // Quyidagi shartlar bajarilishi kerak:
-                    // 1. Xabar obyekti mavjud bo'lishi (null yoki undefined emas).
-                    // 2. Xabarda matn (text) mavjud bo'lishi.
-                    // 3. Xabar biz kutayotgan chat_id dan kelgan bo'lishi (JUDA MUHIM!).
-                    if (messageObject && messageObject.text && messageObject.chat && String(messageObject.chat.id) === String(chatId)) {
-                        const text = messageObject.text;
-                        // console.log(`Mini-oynaga qo'shilmoqda (Chat ID: ${messageObject.chat.id}): "${text}" (Update ID: ${update.update_id})`);
-                        appendMessageToMiniWindow(text);
-                    } else {
-                        // Agar xabar kerakli shartlarga mos kelmasa (masalan, boshqa chatdan yoki matnsiz)
-                        // console.log(`Update ${update.update_id} (chat: ${messageObject?.chat?.id}) mini-oynaga qo'shilmadi.`);
-                    }
-                });
-
-                // Barcha yangilanishlar qayta ishlangandan so'ng, lastProcessedUpdateId ni yangilaymiz
-                // Bu keyingi so'rovda faqat undan keyingi yangilanishlarni olish uchun kerak
-                lastProcessedUpdateId = maxUpdateIdInBatch;
-                // console.log("lastProcessedUpdateId yangilandi:", lastProcessedUpdateId); // Test uchun
-            }
-        } else {
-            // Agar data.ok false bo'lsa yoki data.result mavjud bo'lmasa/massiv bo'lmasa
-            console.error("Telegram API dan yangilanishlarni olishda xatolik (data.ok false yoki result yaroqsiz):", data.description || "No description provided");
-        }
-    } catch (error) {
-        // Tarmoq xatoliklari (masalan, internet yo'q) yoki JSON parse qilishdagi xatolar
-        console.error("getNewAnswersFromTelegram funksiyasida kutilmagan istisno:", error);
-    }
+                if (text && updateId > lastProcessedUpdateId) {
+                    lastProcessedUpdateId = updateId;
+                    appendMessageToMiniWindow(text);
+                }
+            });
+        }
+    } catch (error) {
+        console.error("Xatolik yuz berdi:", error.message);
+    } finally {
+        // 2 soniyadan keyin qayta chaqiriladi
+        setTimeout(getNewAnswersFromTelegram, 2000);
+    }
 }
 
 
