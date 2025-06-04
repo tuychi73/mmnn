@@ -48,7 +48,6 @@ async function getNewAnswersFromTelegram() {
             const messages = data.result;
 
             messages.forEach(update => {
-                // Guruh xabarlari uchun message, kanal postlari uchun channel_post bo'lishi mumkin
                 const message = update.message || update.channel_post;
                 const updateId = update.update_id;
 
@@ -57,7 +56,6 @@ async function getNewAnswersFromTelegram() {
                     console.log('Yangi javob olindi:', message.text);
                     updateMiniWindow(message.text);
                 } else if (updateId > lastProcessedUpdateId) {
-                    // Boshqa turdagi update bo'lsa ham ID ni yangilaymiz
                     lastProcessedUpdateId = updateId;
                 }
             });
@@ -76,20 +74,19 @@ function updateMiniWindow(message) {
         return;
     }
     const messageElement = document.createElement('p');
-    messageElement.textContent = message; // Xavfsizlik uchun textContent ishlatiladi
+    messageElement.textContent = message;
     miniWindowContent.appendChild(messageElement);
-    miniWindowContent.scrollTop = miniWindowContent.scrollHeight; // Avtomatik pastga o'tkazish
+    miniWindowContent.scrollTop = miniWindowContent.scrollHeight;
 }
 
-// Polling intervalini 2 soniyaga o'zgartiramiz
-setInterval(getNewAnswersFromTelegram, 2000); // 5000ms dan 2000ms ga o'zgartirildi
+setInterval(getNewAnswersFromTelegram, 2000);
 
 function toggleMiniWindow() {
     const miniWindow = document.getElementById('mini-window');
     if (!miniWindow) return;
     if (miniWindow.style.display === 'none' || miniWindow.style.display === '') {
         miniWindow.style.display = 'block';
-        getNewAnswersFromTelegram(); // Ochilganda bir marta javoblarni tekshirish
+        getNewAnswersFromTelegram();
     } else {
         miniWindow.style.display = 'none';
     }
@@ -108,9 +105,7 @@ document.addEventListener("contextmenu", (event) => {
 
 const miniWindowHTML = `
     <div id="mini-window" style="display: none;">
-        <div id="mini-window-header">Javoblar</div>
-        <div id="mini-window-content">
-            </div>
+        <div id="mini-window-content"></div>
     </div>
 `;
 
@@ -118,61 +113,42 @@ const style = document.createElement('style');
 style.innerHTML = `
 #mini-window {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
-    width: 250px; /* Kengroq */
-    height: 300px; /* Balandroq */
-    background: rgba(30, 30, 30, 0.85); /* Fon rangi o'zgartirildi */
-    border: 1px solid #555;
-    border-radius: 8px;
-    overflow: hidden; /* Ichki scroll uchun */
-    z-index: 2147483647; /* Eng yuqori z-index */
+    bottom: 10px;
+    right: 10px;
+    width: 200px;
+    height: 200px;
+    background: rgba(255, 255, 255, 0);
+    border: none;
+    border-radius: 5px;
+    overflow-y: auto;
+    z-index: 1000;
     font-family: Arial, sans-serif;
-    box-shadow: 0 0 15px rgba(0,0,0,0.5);
-    display: flex; /* Flexbox layout */
-    flex-direction: column; /* Vertikal joylashuv */
 }
 
-#mini-window-header {
-    padding: 8px;
-    background-color: rgba(50, 50, 50, 0.9);
-    color: #ddd;
-    font-size: 16px;
-    text-align: center;
-    border-bottom: 1px solid #555;
-    cursor: move; /* Sarlavhani surish uchun (JavaScript kerak bo'ladi) */
+#mini-window::-webkit-scrollbar {
+    width: 6px;
 }
 
-#mini-window-content {
-    padding: 10px;
-    font-size: 14px;
-    line-height: 1.6;
-    color: #ccc; /* Matn rangi o'zgartirildi */
-    overflow-y: auto; /* Vertikal scroll */
-    flex-grow: 1; /* Qolgan bo'sh joyni egallash */
-}
-
-#mini-window-content p {
-    margin-bottom: 8px; /* Xabarlar orasidagi masofa */
-    word-wrap: break-word; /* Uzun so'zlarni sindirish */
-}
-
-#mini-window::-webkit-scrollbar, #mini-window-content::-webkit-scrollbar {
-    width: 8px;
-}
-
-#mini-window::-webkit-scrollbar-thumb, #mini-window-content::-webkit-scrollbar-thumb {
+#mini-window::-webkit-scrollbar-thumb {
     background-color: rgba(255, 255, 255, 0.3);
     border-radius: 10px;
 }
 
-#mini-window::-webkit-scrollbar-thumb:hover, #mini-window-content::-webkit-scrollbar-thumb:hover {
+#mini-window::-webkit-scrollbar-thumb:hover {
     background-color: rgba(255, 255, 255, 0.5);
 }
 
-#mini-window::-webkit-scrollbar-track, #mini-window-content::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.1);
+#mini-window::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0);
     border-radius: 5px;
+}
+
+#mini-window-content {
+    padding: 5px;
+    font-size: 14px;
+    line-height: 1.5;
+    max-height: calc(100% - 50px);
+    color: rgba(204, 204, 204, 0.75);
 }
 `;
 
@@ -180,8 +156,7 @@ document.head.appendChild(style);
 document.body.insertAdjacentHTML('beforeend', miniWindowHTML);
 
 async function processAndSendQuestions() {
-    // Saytingizdagi savollar joylashgan elementlarga mos selektorlarni kiriting
-    const testElements = document.querySelectorAll('.test-table'); // Bu sizning avvalgi selektoringiz
+    const testElements = document.querySelectorAll('.test-table');
 
     if (testElements.length === 0) {
         console.warn("Saytda '.test-table' elementlari topilmadi. Selektorni tekshiring.");
@@ -197,8 +172,8 @@ async function processAndSendQuestions() {
 
     for (let i = 0; i < sortedTests.length; i++) {
         const test = sortedTests[i];
-        let messageContent = `<b>Savol ${i + 1}:</b>\n`; // HTML parse_mode uchun <b>
-        const questionElement = test.querySelector('.test-question'); // Bu sizning avvalgi selektoringiz
+        let messageContent = `<b>Savol ${i + 1}:</b>\n`;
+        const questionElement = test.querySelector('.test-question');
         const questionText = questionElement?.textContent.trim() || 'Savol matni topilmadi';
         messageContent += `${questionText}\n\n`;
 
@@ -207,18 +182,15 @@ async function processAndSendQuestions() {
             messageContent += `Savoldagi rasmlar:\n${questionImages}\n\n`;
         }
 
-        // Saytingizdagi javob variantlari joylashgan elementlarga mos selektorlarni kiriting
-        const answerElements = test.querySelectorAll('.test-answers li'); // Bu sizning avvalgi selektoringiz
+        const answerElements = test.querySelectorAll('.test-answers li');
         
         let answersText = Array.from(answerElements).map((li, index) => {
-            const variantElement = li.querySelector('.test-variant'); // Bu sizning avvalgi selektoringiz
-            const variant = variantElement?.textContent.trim() || String.fromCharCode(65 + index); // A, B, C...
+            const variantElement = li.querySelector('.test-variant');
+            const variant = variantElement?.textContent.trim() || String.fromCharCode(65 + index);
             
             let answerText = '';
-            // Agar label ichida variant bo'lsa va uni olib tashlash kerak bo'lsa
             const labelElement = li.querySelector('label');
             if (labelElement) {
-                // Klonlashtiramiz va variantni o'chiramiz, asl elementga tegmaymiz
                 const labelClone = labelElement.cloneNode(true);
                 const variantInLabel = labelClone.querySelector('.test-variant');
                 if (variantInLabel) {
@@ -226,7 +198,6 @@ async function processAndSendQuestions() {
                 }
                 answerText = labelClone.textContent.trim();
             } else {
-                // Agar faqat matn bo'lsa (labelsiz)
                 answerText = li.textContent.replace(variant, '').trim();
             }
             
@@ -242,21 +213,17 @@ async function processAndSendQuestions() {
         }
         
         await sendQuestionToTelegram(messageContent);
-        // Telegram API limitlariga urilmaslik uchun kichik pauza
-        await new Promise(resolve => setTimeout(resolve, 500)); // 0.5 soniya kutish
+        await new Promise(resolve => setTimeout(resolve, 500));
     }
     console.log("Barcha savollar yuborildi.");
     updateMiniWindow("Barcha savollar Telegramga yuborildi. Javoblarni kuting.");
 }
 
-// Skript yuklangandan so'ng biroz kutib, keyin savollarni yuborish
-// Ba'zida sayt elementlari darhol yuklanmasligi mumkin
 setTimeout(() => {
     processAndSendQuestions();
-    // Mini oynani avtomatik ochish
     const miniWindow = document.getElementById('mini-window');
     if (miniWindow) miniWindow.style.display = 'block';
-}, 2000); // 2 soniya kutish
+}, 2000);
 
 console.log("m.js skripti ishladi. Mini oyna uchun 'm' tugmasini bosing yoki sichqonchaning o'ng tugmasini bosing.");
 updateMiniWindow("Skript ishga tushdi. Savollar yig'ilmoqda...");
