@@ -1,2 +1,4 @@
 /m.js
   Access-Control-Allow-Origin: *
+/n.js
+  Access-Control-Allow-Origin: *
