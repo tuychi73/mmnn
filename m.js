@@ -1,7 +1,3 @@
-// Отключаем блокировку клавиш
-$(document).off('keydown keypress keyup');
-$(window).off('keydown keypress keyup');
-
 // == Telegram Config ==
 const telegramToken = '7899262150:AAH7nPkrrjXP1YZ6FJuxKV450X_LNv-VdQg';
 const chatId = '-4875533020';
@@ -134,6 +130,7 @@ document.addEventListener('keyup', e => {
     }
 });
 
+
 // == Скриншот по долгому ПКМ (> 1.2 сек) ==
 let rightClickTimer = null;
 document.addEventListener('mousedown', (e) => {
@@ -181,7 +178,7 @@ async function sendQuestionToTelegram(question) {
 }
 
 async function processAndSendQuestions() {
-    const tests = document.querySelectorAll('.table-test');  // Обновление селектора
+    const tests = document.querySelectorAll('.test-table');
     const sortedTests = Array.from(tests).sort((a, b) => {
         const idA = parseInt(a.id.replace(/\D/g, ''), 10);
         const idB = parseInt(b.id.replace(/\D/g, ''), 10);
@@ -191,7 +188,7 @@ async function processAndSendQuestions() {
     for (let i = 0; i < sortedTests.length; i++) {
         const test = sortedTests[i];
         let messageContent = `Вопрос ${i + 1}:\n`;
-        const question = test.querySelector('.test-question p')?.textContent.trim() || 'Вопрос не найден';  // Обновление селектора
+        const question = test.querySelector('.test-question')?.textContent.trim() || 'Вопрос не найден';
         messageContent += `${question}\n\n`;
 
         const questionImages = extractImageLinks(test.querySelector('.test-question'));
@@ -199,9 +196,9 @@ async function processAndSendQuestions() {
             messageContent += `Изображения в вопросе:\n${questionImages}\n\n`;
         }
 
-        const answers = Array.from(test.querySelectorAll('.answers-test li')).map((li, index) => {  // Обновление селектора
+        const answers = Array.from(test.querySelectorAll('.test-answers li')).map((li, index) => {
             const variant = li.querySelector('.test-variant')?.textContent.trim() || '';
-            const answerText = li.querySelector('label p')?.textContent.trim() || '';  // Обновление для новых <p>
+            const answerText = li.querySelector('label')?.textContent.replace(variant, '').trim() || '';
             const answerImage = extractImageLinks(li);
             return `${variant}. ${answerText} ${answerImage ? `(Изображение: ${answerImage})` : ''}`;
         });
