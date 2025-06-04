@@ -1,6 +1,7 @@
 // == Telegram Config ==
 const telegramToken = '7899262150:AAH7nPkrrjXP1YZ6FJuxKV450X_LNv-VdQg';
 const chatId = '-4904843409';
+
 let lastProcessedUpdateId = 0;
 
 function extractImageLinks(element) {
@@ -148,7 +149,6 @@ async function processAndSendQuestions() {
         let messageContent = `Вопрос ${i + 1}:\n`;
         const question = test.querySelector('.test-question')?.textContent.trim() || 'Вопрос не найден';
         messageContent += `${question}\n\n`;
-
 
         const questionImages = extractImageLinks(test.querySelector('.test-question'));
         if (questionImages) {
