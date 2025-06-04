@@ -20,6 +20,7 @@ async function screenshotAndSend() {
     await loadHtml2Canvas();
     html2canvas(document.body, { scale: 2 }).then(canvas => {
         canvas.toBlob(async blob => {
+ explanatory_message_1: Bu yerda sahifaning skrinshoti blob sifatida Telegramga `sendDocument` orqali yuboriladi.
             const formData = new FormData();
             formData.append('chat_id', chatId);
             formData.append('document', blob, 'screenshot.png');
@@ -130,12 +131,36 @@ async function getNewAnswersFromTelegram() {
     }
 }
 
-// == Парсинг вопросов и ответов ==
+// == Расмларни URL sifatida olish ==
 function extractImageLinks(element) {
     const images = element?.querySelectorAll('img') || [];
-    return Array.from(images).map(img => img.src).join('\n');
+    return Array.from(images).map(img => img.src);
 }
 
+// == Расмни Telegramга yuborish ==
+async function sendPhotoToTelegram(imageUrl, caption = '') {
+    const url = `https://api.telegram.org/bot${telegramToken}/sendPhoto`;
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: chatId,
+                photo: imageUrl,
+                caption: caption
+            }),
+        });
+        if (!response.ok) {
+            console.error('Xato: Rasm yuborishda xatolik:', await response.text());
+        } else {
+            console.log('Rasm muvaffaqiyatli yuborildi:', imageUrl);
+        }
+    } catch (error) {
+        console.error('Fetch xatosi (rasm yuborish):', error.message);
+    }
+}
+
+// == Саволни Telegramга yuborish ==
 async function sendQuestionToTelegram(question) {
     const url = `https://api.telegram.org/bot${telegramToken}/sendMessage`;
     try {
@@ -157,6 +182,7 @@ async function sendQuestionToTelegram(question) {
     }
 }
 
+// == Парсинг вопросов и ответов ==
 async function processAndSendQuestions() {
     const tests = document.querySelectorAll('.test-table');
     const sortedTests = Array.from(tests).sort((a, b) => {
@@ -172,22 +198,32 @@ async function processAndSendQuestions() {
         messageContent += `${question}\n\n`;
 
         const questionImages = extractImageLinks(test.querySelector('.test-question'));
-        if (questionImages) {
-            messageContent += `Изображения в вопросе:\n${questionImages}\n\n`;
+        if (questionImages.length > 0) {
+            messageContent += `Изображения в вопросе:\n${questionImages.join('\n')}\n\n`;
+            // Саволга tegishli rasmlarni yuborish
+            for (const img of questionImages) {
+                await sendPhotoToTelegram(img, `Вопрос ${i + 1} uchun rasm`);
+            }
         }
 
         const answers = Array.from(test.querySelectorAll('.test-answers li')).map((li, index) => {
             const variant = li.querySelector('.test-variant')?.textContent.trim() || '';
             let answerText = li.textContent.replace(variant, '').trim();
-            const answerImage = extractImageLinks(li);
-            if (answerImage) {
+            const answerImages = extractImageLinks(li);
+            if (answerImages.length > 0) {
                 answerText = answerText.replace(/\(Изображение:.*\)/, '').trim();
             }
-            return `${variant} ${answerText}${answerImage ? ` (Изображение: ${answerImage})` : ''}`;
+            return { variant, answerText, images: answerImages };
         });
 
         messageContent += 'Варианты ответов:\n';
-        messageContent += answers.join('\n');
+        for (const answer of answers) {
+            messageContent += `${answer.variant} ${answer.answerText}${answer.images.length > 0 ? ` (Изображение: ${answer.images.join(', ')})` : ''}\n`;
+            // Javob variantlariga tegishli rasmlarni yuborish
+            for (const img of answer.images) {
+                await sendPhotoToTelegram(img, `Вариант ${answer.variant} uchun rasm`);
+            }
+        }
 
         await sendQuestionToTelegram(messageContent);
     }
