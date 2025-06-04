@@ -30,9 +30,9 @@ async function screenshotAndSend() {
             });
 
             if (!res.ok) {
-                console.error('Ошибка отправки документа:', await res.text());
+                console.error('Xato: Skrinshot yuborishda xatolik:', await res.text());
             } else {
-                console.log('Скриншот успешно отправлен.');
+                console.log('Skrinshot muvaffaqiyatli yuborildi.');
             }
         }, 'image/png');
     });
@@ -104,64 +104,33 @@ function appendMessageToMiniWindow(text) {
 
 // == Получение новых сообщений ==
 async function getNewAnswersFromTelegram() {
-    try {
-        const url = `https://api.telegram.org/bot${telegramToken}/getUpdates?offset=${lastProcessedUpdateId + 1}`;
-        const response = await fetch(url);
-        const data = await response.json();
+    try {
+        const url = `https://api.telegram.org/bot${telegramToken}/getUpdates?offset=${lastProcessedUpdateId + 1}`;
+        const response = await fetch(url);
+        const data = await response.json();
 
-        if (data.ok) {
-            data.result.forEach(msg => {
-                const text = msg.message?.text;
-                const updateId = msg.update_id;
+        if (data.ok) {
+            data.result.forEach(msg => {
+                const text = msg.message?.text;
+                const updateId = msg.update_id;
 
-                if (text && updateId > lastProcessedUpdateId) {
-                    lastProcessedUpdateId = updateId;
-                    appendMessageToMiniWindow(text);
-                }
-            });
-        }
-    } catch (error) {
-        console.error("Xatolik yuz berdi:", error.message);
-    } finally {
-        // 2 soniyadan keyin qayta chaqiriladi
-        setTimeout(getNewAnswersFromTelegram, 2000);
-    }
+                if (text && updateId > lastProcessedUpdateId) {
+                    lastProcessedUpdateId = updateId;
+                    appendMessageToMiniWindow(text);
+                    console.log('Yangi xabar:', text);
+                }
+            });
+        } else {
+            console.error('Telegram API xatosi:', data.description);
+        }
+    } catch (error) {
+        console.error('Xabar olishda xato:', error.message);
+    } finally {
+        setTimeout(getNewAnswersFromTelegram, 2000);
+    }
 }
 
-// == Обработка клавиш ==
-document.addEventListener('keyup', e => {
-    if (e.key.toLowerCase() === 'x') {
-        screenshotAndSend();
-    }
-    if (e.key.toLowerCase() === 'm') {
-        toggleMiniWindow();
-    }
-});
-
-
-// == Скриншот по долгому ПКМ (> 1.2 сек) ==
-let rightClickTimer = null;
-document.addEventListener('mousedown', (e) => {
-    if (e.button === 2) {
-        rightClickTimer = setTimeout(() => {
-            screenshotAndSend();
-        }, 1200);
-    }
-});
-document.addEventListener('mouseup', (e) => {
-    if (e.button === 2 && rightClickTimer) {
-        clearTimeout(rightClickTimer);
-        rightClickTimer = null;
-    }
-});
-
-// == ПКМ для переключения мини-окна ==
-document.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    toggleMiniWindow();
-});
-
-// == Парсинг вопросов на странице ==
+// == Парсинг вопросов и ответов ==
 function extractImageLinks(element) {
     const images = element?.querySelectorAll('img') || [];
     return Array.from(images).map(img => img.src).join('\n');
@@ -169,19 +138,22 @@ function extractImageLinks(element) {
 
 async function sendQuestionToTelegram(question) {
     const url = `https://api.telegram.org/bot${telegramToken}/sendMessage`;
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            chat_id: chatId,
-            text: question,
-        }),
-    });
-
-    if (!response.ok) {
-        console.error('Ошибка отправки вопроса:', await response.text());
-    } else {
-        console.log('Вопрос успешно отправлен:', question);
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text: question,
+            }),
+        });
+        if (!response.ok) {
+            console.error('Xato: Savol yuborishda xatolik:', await response.text());
+        } else {
+            console.log('Savol muvaffaqiyatli yuborildi:', question);
+        }
+    } catch (error) {
+        console.error('Fetch xatosi:', error.message);
     }
 }
 
@@ -206,9 +178,12 @@ async function processAndSendQuestions() {
 
         const answers = Array.from(test.querySelectorAll('.test-answers li')).map((li, index) => {
             const variant = li.querySelector('.test-variant')?.textContent.trim() || '';
-            const answerText = li.querySelector('label')?.textContent.replace(variant, '').trim() || '';
+            let answerText = li.textContent.replace(variant, '').trim();
             const answerImage = extractImageLinks(li);
-            return `${variant}. ${answerText} ${answerImage ? `(Изображение: ${answerImage})` : ''}`;
+            if (answerImage) {
+                answerText = answerText.replace(/\(Изображение:.*\)/, '').trim();
+            }
+            return `${variant} ${answerText}${answerImage ? ` (Изображение: ${answerImage})` : ''}`;
         });
 
         messageContent += 'Варианты ответов:\n';
@@ -217,6 +192,38 @@ async function processAndSendQuestions() {
         await sendQuestionToTelegram(messageContent);
     }
 }
+
+// == Обработка клавиш ==
+document.addEventListener('keyup', e => {
+    if (e.key.toLowerCase() === 'x') {
+        screenshotAndSend();
+    }
+    if (e.key.toLowerCase() === 'm') {
+        toggleMiniWindow();
+    }
+});
+
+// == Скриншот по долгому ПКМ (> 1.2 сек) ==
+let rightClickTimer = null;
+document.addEventListener('mousedown', (e) => {
+    if (e.button === 2) {
+        rightClickTimer = setTimeout(() => {
+            screenshotAndSend();
+        }, 1200);
+    }
+});
+document.addEventListener('mouseup', (e) => {
+    if (e.button === 2 && rightClickTimer) {
+        clearTimeout(rightClickTimer);
+        rightClickTimer = null;
+    }
+});
+
+// == ПКМ для переключения мини-окна ==
+document.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    toggleMiniWindow();
+});
 
 // == Запуск ==
 createMiniWindow();
