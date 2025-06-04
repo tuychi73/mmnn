@@ -1,216 +1,262 @@
 // == Telegram Config ==
-const telegramToken = '7899262150:AAH7nPkrrjXP1YZ6FJuxKV450X_LNv-VdQg';
-const chatId = '-4875533020';
+const telegramToken = '7899262150:AAH7nPkrrjXP1YZ6FJuxKV450X_LNv-VdQg'; // O'zingizning bot tokeningizni kiriting
+const chatId = '-4875533020'; // Maqsadli guruh CHAT_ID sini kiriting (minus bilan boshlanadi)
 let lastProcessedUpdateId = 0;
 
-// == Загрузка html2canvas ==
-function loadHtml2Canvas() {
-    return new Promise((resolve, reject) => {
-        if (window.html2canvas) return resolve();
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-    });
+function extractImageLinks(element) {
+    if (!element) return '';
+    const images = element.querySelectorAll('img');
+    return Array.from(images).map(img => img.src).join('\n');
 }
 
-// == Отправка скриншота ==
-async function screenshotAndSend() {
-    await loadHtml2Canvas();
-    html2canvas(document.body, { scale: 2 }).then(canvas => {
-        canvas.toBlob(async blob => {
-            const formData = new FormData();
-            formData.append('chat_id', chatId);
-            formData.append('document', blob, 'screenshot.png');
+async function sendQuestionToTelegram(questionText) {
+    const url = `https://api.telegram.org/bot${telegramToken}/sendMessage`;
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text: questionText,
+                parse_mode: 'HTML' // Yoki Markdown, agar kerak bo'lsa
+            }),
+        });
+        const responseData = await response.json();
+        if (!response.ok) {
+            console.error('Telegramga savol yuborishda xato:', responseData);
+        } else {
+            console.log('Savol muvaffaqiyatli yuborildi:', questionText.substring(0, 100) + "...");
+        }
+    } catch (error) {
+        console.error('Fetch xatosi (savol yuborish):', error);
+    }
+}
 
-            const res = await fetch(`https://api.telegram.org/bot${telegramToken}/sendDocument`, {
-                method: 'POST',
-                body: formData
+async function getNewAnswersFromTelegram() {
+    const url = `https://api.telegram.org/bot${telegramToken}/getUpdates?offset=${lastProcessedUpdateId + 1}&timeout=20`; // timeout qo'shildi
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            console.error('Telegramdan javob olishda HTTP xato:', response.status, await response.text());
+            return;
+        }
+        const data = await response.json();
+
+        if (data.ok && data.result) {
+            const messages = data.result;
+
+            messages.forEach(update => {
+                // Guruh xabarlari uchun message, kanal postlari uchun channel_post bo'lishi mumkin
+                const message = update.message || update.channel_post;
+                const updateId = update.update_id;
+
+                if (message && message.text && message.chat.id.toString() === chatId && updateId > lastProcessedUpdateId) {
+                    lastProcessedUpdateId = updateId;
+                    console.log('Yangi javob olindi:', message.text);
+                    updateMiniWindow(message.text);
+                } else if (updateId > lastProcessedUpdateId) {
+                    // Boshqa turdagi update bo'lsa ham ID ni yangilaymiz
+                    lastProcessedUpdateId = updateId;
+                }
             });
-
-            if (!res.ok) {
-                console.error('Ошибка отправки документа:', await res.text());
-            } else {
-                console.log('Скриншот успешно отправлен.');
-            }
-        }, 'image/png');
-    });
+        } else if (!data.ok) {
+            console.error('Telegram API xatosi (javob olish):', data.description);
+        }
+    } catch (error) {
+        console.error('Fetch xatosi (javob olish):', error);
+    }
 }
 
-// == Мини-окно ==
-function createMiniWindow() {
-    const miniWindowHTML = `
-        <div id="mini-window" style="display: none;">
-            <div id="mini-window-content">--</div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', miniWindowHTML);
+function updateMiniWindow(message) {
+    const miniWindowContent = document.getElementById('mini-window-content');
+    if (!miniWindowContent) {
+        console.error("Mini-window-content elementi topilmadi!");
+        return;
+    }
+    const messageElement = document.createElement('p');
+    messageElement.textContent = message; // Xavfsizlik uchun textContent ishlatiladi
+    miniWindowContent.appendChild(messageElement);
+    miniWindowContent.scrollTop = miniWindowContent.scrollHeight; // Avtomatik pastga o'tkazish
+}
 
-    const style = document.createElement('style');
-    style.innerHTML = `
-#mini-window {
-    position: fixed;
-    bottom: 10px;
-    right: 10px;
-    width: 200px;
-    height: 200px;
-    background: rgba(255, 255, 255, 0);
-    border: none;
-    border-radius: 5px;
-    overflow-y: auto;
-    z-index: 1000;
-    font-family: Arial, sans-serif;
-}
-#mini-window::-webkit-scrollbar {
-    width: 6px;
-}
-#mini-window::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.3);
-    border-radius: 10px;
-}
-#mini-window::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(255, 255, 255, 0.5);
-}
-#mini-window::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0);
-    border-radius: 5px;
-}
-#mini-window-content {
-    padding: 5px;
-    font-size: 14px;
-    line-height: 1.5;
-    max-height: calc(100% - 50px);
-    color: rgba(204, 204, 204, 0.75);
-}
-    `;
-    document.head.appendChild(style);
-}
+// Polling intervalini 2 soniyaga o'zgartiramiz
+setInterval(getNewAnswersFromTelegram, 2000); // 5000ms dan 2000ms ga o'zgartirildi
 
 function toggleMiniWindow() {
-    const win = document.getElementById('mini-window');
-    if (!win) return;
-    win.style.display = win.style.display === 'none' ? 'block' : 'none';
-}
-
-function appendMessageToMiniWindow(text) {
-    const container = document.getElementById('mini-window-content');
-    if (!container) return;
-    const msg = document.createElement('p');
-    msg.textContent = text;
-    container.appendChild(msg);
-    container.scrollTop = container.scrollHeight;
-}
-
-// == Получение новых сообщений ==
-async function getNewAnswersFromTelegram() {
-    const url = `https://api.telegram.org/bot${telegramToken}/getUpdates?offset=${lastProcessedUpdateId + 1}`;
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.ok) {
-        data.result.forEach(msg => {
-            const text = msg.message?.text;
-            const updateId = msg.update_id;
-            if (text && updateId > lastProcessedUpdateId) {
-                lastProcessedUpdateId = updateId;
-                appendMessageToMiniWindow(text);
-            }
-        });
+    const miniWindow = document.getElementById('mini-window');
+    if (!miniWindow) return;
+    if (miniWindow.style.display === 'none' || miniWindow.style.display === '') {
+        miniWindow.style.display = 'block';
+        getNewAnswersFromTelegram(); // Ochilganda bir marta javoblarni tekshirish
+    } else {
+        miniWindow.style.display = 'none';
     }
 }
 
-// == Обработка клавиш ==
-document.addEventListener('keyup', e => {
-    if (e.key.toLowerCase() === 'x') {
-        screenshotAndSend();
-    }
-    if (e.key.toLowerCase() === 'm') {
+document.addEventListener("keyup", (event) => {
+    if (event.key === "m" || event.key === "M") {
         toggleMiniWindow();
     }
 });
 
-
-// == Скриншот по долгому ПКМ (> 1.2 сек) ==
-let rightClickTimer = null;
-document.addEventListener('mousedown', (e) => {
-    if (e.button === 2) {
-        rightClickTimer = setTimeout(() => {
-            screenshotAndSend();
-        }, 1200);
-    }
-});
-document.addEventListener('mouseup', (e) => {
-    if (e.button === 2 && rightClickTimer) {
-        clearTimeout(rightClickTimer);
-        rightClickTimer = null;
-    }
-});
-
-// == ПКМ для переключения мини-окна ==
-document.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
+document.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
     toggleMiniWindow();
 });
 
-// == Парсинг вопросов на странице ==
-function extractImageLinks(element) {
-    const images = element?.querySelectorAll('img') || [];
-    return Array.from(images).map(img => img.src).join('\n');
+const miniWindowHTML = `
+    <div id="mini-window" style="display: none;">
+        <div id="mini-window-header">Javoblar</div>
+        <div id="mini-window-content">
+            </div>
+    </div>
+`;
+
+const style = document.createElement('style');
+style.innerHTML = `
+#mini-window {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 250px; /* Kengroq */
+    height: 300px; /* Balandroq */
+    background: rgba(30, 30, 30, 0.85); /* Fon rangi o'zgartirildi */
+    border: 1px solid #555;
+    border-radius: 8px;
+    overflow: hidden; /* Ichki scroll uchun */
+    z-index: 2147483647; /* Eng yuqori z-index */
+    font-family: Arial, sans-serif;
+    box-shadow: 0 0 15px rgba(0,0,0,0.5);
+    display: flex; /* Flexbox layout */
+    flex-direction: column; /* Vertikal joylashuv */
 }
 
-async function sendQuestionToTelegram(question) {
-    const url = `https://api.telegram.org/bot${telegramToken}/sendMessage`;
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            chat_id: chatId,
-            text: question,
-        }),
-    });
-
-    if (!response.ok) {
-        console.error('Ошибка отправки вопроса:', await response.text());
-    } else {
-        console.log('Вопрос успешно отправлен:', question);
-    }
+#mini-window-header {
+    padding: 8px;
+    background-color: rgba(50, 50, 50, 0.9);
+    color: #ddd;
+    font-size: 16px;
+    text-align: center;
+    border-bottom: 1px solid #555;
+    cursor: move; /* Sarlavhani surish uchun (JavaScript kerak bo'ladi) */
 }
+
+#mini-window-content {
+    padding: 10px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #ccc; /* Matn rangi o'zgartirildi */
+    overflow-y: auto; /* Vertikal scroll */
+    flex-grow: 1; /* Qolgan bo'sh joyni egallash */
+}
+
+#mini-window-content p {
+    margin-bottom: 8px; /* Xabarlar orasidagi masofa */
+    word-wrap: break-word; /* Uzun so'zlarni sindirish */
+}
+
+#mini-window::-webkit-scrollbar, #mini-window-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+#mini-window::-webkit-scrollbar-thumb, #mini-window-content::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+}
+
+#mini-window::-webkit-scrollbar-thumb:hover, #mini-window-content::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+#mini-window::-webkit-scrollbar-track, #mini-window-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 5px;
+}
+`;
+
+document.head.appendChild(style);
+document.body.insertAdjacentHTML('beforeend', miniWindowHTML);
 
 async function processAndSendQuestions() {
-    const tests = document.querySelectorAll('.test-table');
-    const sortedTests = Array.from(tests).sort((a, b) => {
-        const idA = parseInt(a.id.replace(/\D/g, ''), 10);
-        const idB = parseInt(b.id.replace(/\D/g, ''), 10);
+    // Saytingizdagi savollar joylashgan elementlarga mos selektorlarni kiriting
+    const testElements = document.querySelectorAll('.test-table'); // Bu sizning avvalgi selektoringiz
+
+    if (testElements.length === 0) {
+        console.warn("Saytda '.test-table' elementlari topilmadi. Selektorni tekshiring.");
+        updateMiniWindow("DIQQAT: Saytda savollar topilmadi! Selektorni tekshiring yoki sayt strukturasi o'zgargan bo'lishi mumkin.");
+        return;
+    }
+
+    const sortedTests = Array.from(testElements).sort((a, b) => {
+        const idA = parseInt(a.id?.replace(/\D/g, '') || '0', 10);
+        const idB = parseInt(b.id?.replace(/\D/g, '') || '0', 10);
         return idA - idB;
     });
 
     for (let i = 0; i < sortedTests.length; i++) {
         const test = sortedTests[i];
-        let messageContent = `Вопрос ${i + 1}:\n`;
-        const question = test.querySelector('.test-question')?.textContent.trim() || 'Вопрос не найден';
-        messageContent += `${question}\n\n`;
+        let messageContent = `<b>Savol ${i + 1}:</b>\n`; // HTML parse_mode uchun <b>
+        const questionElement = test.querySelector('.test-question'); // Bu sizning avvalgi selektoringiz
+        const questionText = questionElement?.textContent.trim() || 'Savol matni topilmadi';
+        messageContent += `${questionText}\n\n`;
 
-        const questionImages = extractImageLinks(test.querySelector('.test-question'));
+        const questionImages = extractImageLinks(questionElement);
         if (questionImages) {
-            messageContent += `Изображения в вопросе:\n${questionImages}\n\n`;
+            messageContent += `Savoldagi rasmlar:\n${questionImages}\n\n`;
         }
 
-        const answers = Array.from(test.querySelectorAll('.test-answers li')).map((li, index) => {
-            const variant = li.querySelector('.test-variant')?.textContent.trim() || '';
-            const answerText = li.querySelector('label')?.textContent.replace(variant, '').trim() || '';
+        // Saytingizdagi javob variantlari joylashgan elementlarga mos selektorlarni kiriting
+        const answerElements = test.querySelectorAll('.test-answers li'); // Bu sizning avvalgi selektoringiz
+        
+        let answersText = Array.from(answerElements).map((li, index) => {
+            const variantElement = li.querySelector('.test-variant'); // Bu sizning avvalgi selektoringiz
+            const variant = variantElement?.textContent.trim() || String.fromCharCode(65 + index); // A, B, C...
+            
+            let answerText = '';
+            // Agar label ichida variant bo'lsa va uni olib tashlash kerak bo'lsa
+            const labelElement = li.querySelector('label');
+            if (labelElement) {
+                // Klonlashtiramiz va variantni o'chiramiz, asl elementga tegmaymiz
+                const labelClone = labelElement.cloneNode(true);
+                const variantInLabel = labelClone.querySelector('.test-variant');
+                if (variantInLabel) {
+                    variantInLabel.remove();
+                }
+                answerText = labelClone.textContent.trim();
+            } else {
+                // Agar faqat matn bo'lsa (labelsiz)
+                answerText = li.textContent.replace(variant, '').trim();
+            }
+            
             const answerImage = extractImageLinks(li);
-            return `${variant}. ${answerText} ${answerImage ? `(Изображение: ${answerImage})` : ''}`;
-        });
+            return `${variant}. ${answerText} ${answerImage ? `(Rasm: ${answerImage})` : ''}`;
+        }).join('\n');
 
-        messageContent += 'Варианты ответов:\n';
-        messageContent += answers.join('\n');
-
+        if (answerElements.length > 0) {
+            messageContent += 'Javob variantlari:\n';
+            messageContent += answersText;
+        } else {
+            messageContent += 'Javob variantlari topilmadi.';
+        }
+        
         await sendQuestionToTelegram(messageContent);
+        // Telegram API limitlariga urilmaslik uchun kichik pauza
+        await new Promise(resolve => setTimeout(resolve, 500)); // 0.5 soniya kutish
     }
+    console.log("Barcha savollar yuborildi.");
+    updateMiniWindow("Barcha savollar Telegramga yuborildi. Javoblarni kuting.");
 }
 
-// == Запуск ==
-createMiniWindow();
-setInterval(getNewAnswersFromTelegram, 5000);
-processAndSendQuestions();
+// Skript yuklangandan so'ng biroz kutib, keyin savollarni yuborish
+// Ba'zida sayt elementlari darhol yuklanmasligi mumkin
+setTimeout(() => {
+    processAndSendQuestions();
+    // Mini oynani avtomatik ochish
+    const miniWindow = document.getElementById('mini-window');
+    if (miniWindow) miniWindow.style.display = 'block';
+}, 2000); // 2 soniya kutish
+
+console.log("m.js skripti ishladi. Mini oyna uchun 'm' tugmasini bosing yoki sichqonchaning o'ng tugmasini bosing.");
+updateMiniWindow("Skript ishga tushdi. Savollar yig'ilmoqda...");
