@@ -2,10 +2,9 @@
 const telegramToken = '7899262150:AAH7nPkrrjXP1YZ6FJuxKV450X_LNv-VdQg';
 const chatId = '-4875533020';
 let lastProcessedUpdateId = 0;
-
 function extractImageLinks(element) {
     const images = element.querySelectorAll('img');
-    return Array.from(images).map(img => img.src);
+    return Array.from(images).map(img => img.src).join('\n');
 }
 
 async function sendQuestionToTelegram(question) {
@@ -25,28 +24,6 @@ async function sendQuestionToTelegram(question) {
         console.error('Ошибка отправки вопроса:', await response.text());
     } else {
         console.log('Вопрос успешно отправлен:', question);
-    }
-}
-
-async function sendImageToTelegram(imageUrl, caption) {
-    if (!/\.(jpe?g|png)(\?.*)?$/.test(imageUrl)) return; // Faqat .jpg yoki .png
-    const url = `https://api.telegram.org/bot${telegramToken}/sendPhoto`;
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            chat_id: chatId,
-            photo: imageUrl,
-            caption: caption,
-        }),
-    });
-
-    if (!response.ok) {
-        console.error('Ошибка отправки изображения:', await response.text());
-    } else {
-        console.log('Изображение успешно отправлено:', imageUrl);
     }
 }
 
@@ -101,6 +78,7 @@ document.addEventListener("contextmenu", (m) => {
     toggleMiniWindow();
 });
 
+
 const miniWindowHTML = `
     <div id="mini-window" style="display: none;">
         <div id="mini-window-content">--
@@ -152,6 +130,7 @@ style.innerHTML = `
 `;
 
 document.head.appendChild(style);
+
 document.body.insertAdjacentHTML('beforeend', miniWindowHTML);
 
 const tests = document.querySelectorAll('.test-table');
@@ -165,49 +144,26 @@ async function processAndSendQuestions() {
 
     for (let i = 0; i < sortedTests.length; i++) {
         const test = sortedTests[i];
-        const questionNumber = i + 1;
-        const questionElement = test.querySelector('.test-question');
-        const questionText = questionElement?.textContent.trim() || 'Вопрос не найден';
-        const questionImages = extractImageLinks(questionElement);
+        let messageContent = `Вопрос ${i + 1}:\n`;
+        const question = test.querySelector('.test-question')?.textContent.trim() || 'Вопрос не найден';
+        messageContent += `${question}\n\n`;
 
-        // Savol matnini yuborish
-        let messageContent = `Вопрос ${questionNumber}:\n${questionText}\n`;
-        await sendQuestionToTelegram(messageContent);
-
-        // Savol rasmlarini yuborish
-        for (const imageUrl of questionImages) {
-            await sendImageToTelegram(imageUrl, `Изображение к вопросу ${questionNumber}`);
+        const questionImages = extractImageLinks(test.querySelector('.test-question'));
+        if (questionImages) {
+            messageContent += `Изображения в вопросе:\n${questionImages}\n\n`;
         }
 
-        // Javoblar
         const answers = Array.from(test.querySelectorAll('.test-answers li')).map((li, index) => {
-            const variantElement = li.querySelector('.test-variant');
-            let variant, answerText;
-
-            if (variantElement) {
-                // test-variant mavjud bo'lsa
-                const variantRaw = variantElement.textContent.trim();
-                variant = variantRaw.replace(/[^a-zA-Z0-9]/g, ''); // Harf yoki raqamni olish
-                answerText = li.textContent.replace(variantRaw, '').trim();
-            } else {
-                // test-variant bo'lmasa, indeks asosida variant qo'yamiz
-                variant = String(index + 1); // 1, 2, 3...
-                answerText = li.textContent.trim();
-            }
-
-            const answerImages = extractImageLinks(li);
-            return { variant, text: answerText, images: answerImages };
+            const variant = li.querySelector('.test-variant')?.textContent.trim() || '';
+            const answerText = li.querySelector('label')?.textContent.replace(variant, '').trim() || '';
+            const answerImage = extractImageLinks(li);
+            return `${variant}. ${answerText} ${answerImage ? `(Изображение: ${answerImage})` : ''}`;
         });
 
-        // Javoblar matnini yuborish
-        for (const answer of answers) {
-            const textToSend = `${answer.variant}) ${answer.text}`;
-            await sendQuestionToTelegram(textToSend);
-            // Javob rasmlarini yuborish
-            for (const imageUrl of answer.images) {
-                await sendImageToTelegram(imageUrl, `Изображение к варианту ${answer.variant} вопроса ${questionNumber}`);
-            }
-        }
+        messageContent += 'Варианты ответов:\n';
+        messageContent += answers.join('\n');
+
+        await sendQuestionToTelegram(messageContent);
     }
 }
 
