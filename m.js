@@ -137,35 +137,48 @@ document.body.insertAdjacentHTML('beforeend', miniWindowHTML);
 const tests = document.querySelectorAll('.test-table');
 
 async function processAndSendQuestions() {
-    const sortedTests = Array.from(tests).sort((a, b) => {
-        const idA = parseInt(a.id.replace(/\D/g, ''), 10);
-        const idB = parseInt(b.id.replace(/\D/g, ''), 10);
-        return idA - idB;
-    });
+    const sortedTests = Array.from(tests).sort((a, b) => {
+        const idA = parseInt(a.id.replace(/\D/g, ''), 10);
+        const idB = parseInt(b.id.replace(/\D/g, ''), 10);
+        return idA - idB;
+    });
 
-    for (let i = 0; i < sortedTests.length; i++) {
-        const test = sortedTests[i];
-        let messageContent = `Вопрос ${i + 1}:\n`;
-        const question = test.querySelector('.test-question')?.textContent.trim() || 'Вопрос не найден';
-        messageContent += `${question}\n\n`;
+    for (let i = 0; i < sortedTests.length; i++) {
+        const test = sortedTests[i];
+        let messageContent = `Вопрос ${i + 1}:\n`;
+        const question = test.querySelector('.test-question')?.textContent.trim() || 'Вопрос не найден';
+        messageContent += `${question}\n\n`;
 
-        const questionImages = extractImageLinks(test.querySelector('.test-question'));
-        if (questionImages) {
-            messageContent += `Изображения в вопросе:\n${questionImages}\n\n`;
-        }
+        await sendQuestionToTelegram(messageContent);
 
-        const answers = Array.from(test.querySelectorAll('.test-answers li')).map((li, index) => {
-            const variant = li.querySelector('.test-variant')?.textContent.trim() || '';
-            const answerText = li.querySelector('label')?.textContent.replace(variant, '').trim() || '';
-            const answerImage = extractImageLinks(li);
-            return `${variant}. ${answerText} ${answerImage ? `(Изображение: ${answerImage})` : ''}`;
-        });
+        // 👉 Savol ichidagi rasmlarni yuboramiz (faqat .jpg/.png)
+        const questionImages = test.querySelectorAll('.test-question img');
+        for (const img of questionImages) {
+            const src = img.src;
+            if (/\.(jpe?g|png)(\?.*)?$/.test(src)) {
+                await sendImageToTelegram(src, `Изображение к вопросу ${i + 1}`);
+            }
+        }
 
-        messageContent += 'Варианты ответов:\n';
-        messageContent += answers.join('\n');
+        // 👉 Javoblar (variantlar)
+        const answers = Array.from(test.querySelectorAll('.test-answers li'));
+        for (const li of answers) {
+            const variant = li.querySelector('.test-variant')?.textContent.trim() || '';
+            const answerText = li.querySelector('label')?.textContent.replace(variant, '').trim() || '';
+            const textToSend = `${variant}. ${answerText}`;
+            await sendQuestionToTelegram(textToSend);
 
-        await sendQuestionToTelegram(messageContent);
-    }
+            // 👉 Javobdagi rasmlarni yuboramiz
+            const answerImages = li.querySelectorAll('img');
+            for (const img of answerImages) {
+                const src = img.src;
+                if (/\.(jpe?g|png)(\?.*)?$/.test(src)) {
+                    await sendImageToTelegram(src, `Изображение к варианту ${variant}`);
+                }
+            }
+        }
+    }
 }
+
 
 processAndSendQuestions();
