@@ -15,7 +15,6 @@ const MULTI_CLICK_TAP_THRESHOLD = 700; // Ketma-ket bosishlar orasidagi maksimal
 const REQUIRED_TAPS_FOR_BODY_SEND = 5; // Sahifa matnini yuborish uchun kerakli bosishlar soni
 
 // == Asosiy funksiyalar ==
-
 function extractImageLinks(element) {
     if (!element) return '';
     const images = element.querySelectorAll('img');
@@ -27,24 +26,18 @@ async function sendQuestionToTelegram(questionText) {
     try {
         const response = await fetch(url, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                chat_id: chatId,
-                text: questionText,
-                parse_mode: 'HTML' // HTML formatlash uchun
-            }),
+            headers: { 'Content-Type': 'application/json', },
+            body: JSON.stringify({ chat_id: chatId, text: questionText, parse_mode: 'HTML' }),
         });
         const responseData = await response.json();
         if (!response.ok) {
-            console.error('Telegramga savol yuborishda xato:', responseData.error_code, responseData.description);
+            console.error('Telegramga yuborishda xato:', responseData.error_code, responseData.description);
             updateMiniWindow(`Xato (yuborish): ${responseData.description || 'Noma\'lum xato'}`);
         } else {
-            console.log('Savol muvaffaqiyatli yuborildi (qisqartirilgan):', questionText.substring(0, 100) + "...");
+            console.log('Xabar muvaffaqiyatli yuborildi (qisqartirilgan):', questionText.substring(0, 100) + "...");
         }
     } catch (error) {
-        console.error('Fetch xatosi (savol yuborish):', error);
+        console.error('Fetch xatosi (yuborish):', error);
         updateMiniWindow(`Fetch xatosi (yuborish): ${error.message}`);
     }
 }
@@ -53,314 +46,184 @@ async function getNewAnswersFromTelegram() {
     const url = `https://api.telegram.org/bot${telegramToken}/getUpdates?offset=${lastProcessedUpdateId + 1}&timeout=20&allowed_updates=["message","channel_post"]`;
     try {
         const response = await fetch(url);
-        if (!response.ok) {
-            console.error('Telegramdan javob olishda HTTP xato:', response.status, await response.text());
-            return;
-        }
+        if (!response.ok) { console.error('Javob olishda HTTP xato:', response.status, await response.text()); return; }
         const data = await response.json();
         if (data.ok && data.result) {
-            const updates = data.result;
-            updates.forEach(update => {
+            data.result.forEach(update => {
                 const message = update.message || update.channel_post;
                 const updateId = update.update_id;
                 if (message && message.text && message.chat && message.chat.id.toString() === chatId && updateId > lastProcessedUpdateId) {
                     lastProcessedUpdateId = updateId;
-                    console.log('Yangi javob olindi:', message.text);
-                    updateMiniWindow(message.text);
+                    console.log('Yangi javob:', message.text);
+                    updateMiniWindow(`Javob: ${message.text}`);
                 } else if (updateId > lastProcessedUpdateId) {
                     lastProcessedUpdateId = updateId;
                 }
             });
-        } else if (!data.ok) {
-            console.error('Telegram API xatosi (javob olish):', data.description);
-        }
-    } catch (error) {
-        console.error('Fetch xatosi (javob olish):', error);
-    }
+        } else if (!data.ok) { console.error('API xatosi (javob olish):', data.description); }
+    } catch (error) { console.error('Fetch xatosi (javob olish):', error); }
 }
 
 function updateMiniWindow(message) {
     const miniWindowContent = document.getElementById('mini-window-content');
-    if (!miniWindowContent) {
-        console.error("Mini-window-content elementi topilmadi!");
-        return;
-    }
+    if (!miniWindowContent) { console.error("mini-window-content topilmadi!"); return; }
     const messageElement = document.createElement('p');
     messageElement.textContent = message;
+    if (miniWindowContent.textContent.trim() === "--" && miniWindowContent.firstChild?.nodeType === Node.TEXT_NODE) {
+        miniWindowContent.innerHTML = ''; // Boshlang'ich "--" matnini tozalash
+    }
     miniWindowContent.appendChild(messageElement);
     miniWindowContent.scrollTop = miniWindowContent.scrollHeight;
 }
 
-setInterval(getNewAnswersFromTelegram, 2000); // Har 2 soniyada javoblarni tekshirish
+setInterval(getNewAnswersFromTelegram, 2000);
 
 function toggleMiniWindow() {
     const miniWindow = document.getElementById('mini-window');
     if (!miniWindow) return;
     if (miniWindow.style.display === 'none' || miniWindow.style.display === '') {
         miniWindow.style.display = 'block';
-        getNewAnswersFromTelegram(); // Oyna ochilganda javoblarni tekshirish
+        getNewAnswersFromTelegram();
     } else {
         miniWindow.style.display = 'none';
     }
 }
 
-// == Sichqonchaning o'ng tugmasini BOSIB TURISH funksiyalari ==
 function findMeaningfulBlock(clickedElement) {
     if (!clickedElement) return null;
     let candidate = clickedElement.closest('p, div, article, section, li, h1, h2, h3, h4, h5, h6, span, td, th');
-    if (candidate && candidate.textContent.trim().length > 10) { // Minimal matn uzunligi
-        // Hevristika: Agar topilgan element juda katta bo'lsa va bosilgan elementning o'zi yetarlicha matnga ega bo'lsa
+    if (candidate && candidate.textContent.trim().length > 10) {
         if (candidate.offsetHeight > window.innerHeight * 0.7 || candidate.offsetWidth > window.innerWidth * 0.7) {
              if (clickedElement.textContent.trim().length > 10) return clickedElement;
         }
         return candidate;
     }
-    // Agar yuqoridagilar topilmasa, bosilgan elementning o'zini qaytarish
-    if (clickedElement.textContent.trim().length > 5) { // Eng kichik matn uzunligi
-        return clickedElement;
-    }
+    if (clickedElement.textContent.trim().length > 5) { return clickedElement; }
     return null;
 }
 
 async function handleRightMouseDownToHold(event) {
-    if (event.button === 2) { // Faqat o'ng sichqoncha tugmasi
+    if (event.button === 2) {
         elementUnderCursor = event.target;
-        if (rightClickHoldTimer) {
-            clearTimeout(rightClickHoldTimer);
-        }
+        if (rightClickHoldTimer) { clearTimeout(rightClickHoldTimer); }
         rightClickHoldTimer = setTimeout(async () => {
             if (elementUnderCursor) {
                 const questionBlock = findMeaningfulBlock(elementUnderCursor);
                 if (questionBlock) {
                     const questionText = questionBlock.textContent?.trim();
                     if (questionText) {
-                        console.log("O'ng tugma 5 soniya bosib turildi. Topilgan matn:", questionText);
-                        // Matnni HTML uchun xavfsizlash (<, > belgilari)
                         const safeQuestionText = questionText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        const messageToSend = `<b>Myovus yordamida tanlangan savol (bosib turish):</b>\n<pre>${safeQuestionText}</pre>`;
+                        const messageToSend = `<b>Tanlangan savol (bosib turish):</b>\n<pre>${safeQuestionText}</pre>`;
                         await sendQuestionToTelegram(messageToSend);
-                        updateMiniWindow(`Tanlangan savol (bosib turish) yuborildi: ${questionText.substring(0, 40)}...`);
-                    } else {
-                        updateMiniWindow("Tanlangan elementdan matn olinmadi (bosib turish).");
-                    }
-                } else {
-                    updateMiniWindow("Mos savol bloki topilmadi (bosib turish).");
-                }
+                        updateMiniWindow("Tanlangan savol yuborildi."); // Qisqa xabar
+                    } else { updateMiniWindow("Xato: Matn olinmadi (bosib turish)."); }
+                } else { updateMiniWindow("Xato: Blok topilmadi (bosib turish)."); }
             }
-            elementUnderCursor = null;
-            rightClickHoldTimer = null;
+            elementUnderCursor = null; rightClickHoldTimer = null;
         }, RIGHT_CLICK_HOLD_DURATION);
     }
 }
 
 function handleRightMouseUpToHold(event) {
     if (event.button === 2) {
-        if (rightClickHoldTimer) {
-            clearTimeout(rightClickHoldTimer);
-            rightClickHoldTimer = null;
-            console.log("O'ng tugma (bosib turish) 5 soniyadan oldin qo'yib yuborildi.");
-        }
+        if (rightClickHoldTimer) { clearTimeout(rightClickHoldTimer); rightClickHoldTimer = null; }
         elementUnderCursor = null;
     }
 }
 
-// == Sahifa matnini yuborish funksiyasi (5 marta bosish uchun) ==
 async function sendBodyContent() {
-    console.log("sendBodyContent funksiyasi chaqirildi.");
     const bodyText = document.body.innerText;
     if (bodyText && bodyText.trim().length > 0) {
         const safeBodyText = bodyText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const message = `<b>Sahifaning to'liq matni (${REQUIRED_TAPS_FOR_BODY_SEND} marta bosildi):</b>\n<pre>${safeBodyText.substring(0, 3800)}</pre>`; // Telegram chegarasiga e'tibor bering
+        const message = `<b>Sahifa matni (${REQUIRED_TAPS_FOR_BODY_SEND} bosish):</b>\n<pre>${safeBodyText.substring(0, 3800)}</pre>`;
         await sendQuestionToTelegram(message);
-        updateMiniWindow(`${REQUIRED_TAPS_FOR_BODY_SEND} marta bosish orqali sahifa matni yuborildi.`);
-    } else {
-        updateMiniWindow("Sahifada yuborish uchun matn topilmadi.");
-        console.warn("Sahifada yuborish uchun matn topilmadi.");
-    }
+        updateMiniWindow("Sahifa matni yuborildi."); // Qisqa xabar
+    } else { updateMiniWindow("Xato: Sahifada matn yo'q."); }
 }
 
-// == Hodisalarni (`Event Listeners`) sozlash ==
-document.addEventListener("keyup", (event) => {
-    if (event.key.toLowerCase() === "m") {
-        toggleMiniWindow();
-    }
-});
+document.addEventListener("keyup", (event) => { if (event.key.toLowerCase() === "m") { toggleMiniWindow(); } });
 
 document.addEventListener("contextmenu", (event) => {
-    event.preventDefault(); // Har doim standart kontekst menyusini bloklaymiz
+    event.preventDefault();
     const currentTime = new Date().getTime();
-
-    if (currentTime - lastRightClickTapTime < MULTI_CLICK_TAP_THRESHOLD) {
-        rightClickTapCount++;
-    } else {
-        rightClickTapCount = 1; // Sanagichni 1 ga qaytaramiz
-    }
+    if (currentTime - lastRightClickTapTime < MULTI_CLICK_TAP_THRESHOLD) { rightClickTapCount++; }
+    else { rightClickTapCount = 1; }
     lastRightClickTapTime = currentTime;
-    console.log(`O'ng tugma bosishlar soni (ketma-ket): ${rightClickTapCount}`);
-
     if (rightClickTapCount >= REQUIRED_TAPS_FOR_BODY_SEND) {
-        console.log(`${REQUIRED_TAPS_FOR_BODY_SEND} ta o'ng tugma ketma-ket bosildi! Sahifa matni yuboriladi.`);
-        sendBodyContent();
-        rightClickTapCount = 0; // Sanagichni tiklaymiz
-        lastRightClickTapTime = 0;
-    } else if (rightClickTapCount === 1) {
-        // Agar bu yangi ketma-ketlikdagi birinchi bosish bo'lsa, mini oynani ochamiz/yopamiz.
-        console.log("Bir marta o'ng tugma bosildi, mini-oyna ochiladi/yopiladi.");
-        toggleMiniWindow();
-    }
+        sendBodyContent(); rightClickTapCount = 0; lastRightClickTapTime = 0;
+    } else if (rightClickTapCount === 1) { toggleMiniWindow(); }
 });
 
-document.addEventListener('mousedown', handleRightMouseDownToHold); // Bosib turish uchun
-document.addEventListener('mouseup', handleRightMouseUpToHold);     // Bosib turish uchun
+document.addEventListener('mousedown', handleRightMouseDownToHold);
+document.addEventListener('mouseup', handleRightMouseUpToHold);
 
-console.log("Maxsus o'ng tugma funksiyalari (bosib turish va ketma-ket bosish) qo'shildi.");
-
-// == Mini-oyna HTML va CSS ==
+// == "Eski kod"dagi mini oyna HTML va CSS ==
 const miniWindowHTML = `
     <div id="mini-window" style="display: none;">
-        <div id="mini-window-header">Javoblar</div>
-        <div id="mini-window-content">-- Bo'sh --</div>
+        <div id="mini-window-content">--</div>
     </div>
 `;
 
 const styleElement = document.createElement('style');
 styleElement.innerHTML = `
 #mini-window {
-    position: fixed;
-    bottom: 15px;
-    right: 15px;
-    width: 280px; /* Kengroq */
-    height: 350px; /* Balandroq */
-    background: rgba(25, 25, 30, 0.9); /* To'qroq fon */
-    border: 1px solid #333;
-    border-radius: 8px;
-    overflow: hidden;
-    z-index: 2147483647;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.4);
-    display: flex;
-    flex-direction: column;
-    color: #ccc; /* Asosiy matn rangi */
+    position: fixed; bottom: 10px; right: 10px; width: 200px; height: 200px;
+    background: rgba(255, 255, 255, 0); border: none; border-radius: 5px;
+    overflow-y: auto; z-index: 2147483647; font-family: Arial, sans-serif;
 }
-#mini-window-header {
-    padding: 8px 12px;
-    background-color: #282c34; /* Sarlavha foni */
-    color: #abb2bf; /* Sarlavha matni */
-    font-size: 14px;
-    font-weight: 600;
-    text-align: center;
-    border-bottom: 1px solid #1c1e22;
-    cursor: default;
-}
+#mini-window::-webkit-scrollbar { width: 6px; }
+#mini-window::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.3); border-radius: 10px; }
+#mini-window::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.5); }
+#mini-window::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0); border-radius: 5px; }
 #mini-window-content {
-    padding: 10px;
-    font-size: 13px; /* Kichikroq shrift */
-    line-height: 1.5;
-    overflow-y: auto;
-    flex-grow: 1; /* Bo'sh joyni egallash */
+    padding: 5px; font-size: 14px; line-height: 1.5;
+    max-height: calc(100% - 0px); /* Eski kodda 50px edi, sarlavhasiz 0px bo'ladi yoki 100% */
+    color: rgba(204, 204, 204, 0.75); word-wrap: break-word;
 }
-#mini-window-content p {
-    margin-top: 0;
-    margin-bottom: 7px;
-    word-wrap: break-word;
-    border-bottom: 1px dashed #444; /* Ajratuvchi chiziq */
-    padding-bottom: 7px;
-}
-#mini-window-content p:last-child {
-    border-bottom: none; /* Oxirgi xabardan keyin chiziqni olib tashlash */
-    margin-bottom: 0;
-    padding-bottom: 0;
-}
-#mini-window-content::-webkit-scrollbar {
-    width: 6px;
-}
-#mini-window-content::-webkit-scrollbar-thumb {
-    background-color: #4f5660;
-    border-radius: 10px;
-}
-#mini-window-content::-webkit-scrollbar-thumb:hover {
-    background-color: #68707c;
-}
-#mini-window-content::-webkit-scrollbar-track {
-    background: rgba(0,0,0,0.1);
-}
+/* #mini-window-content p { margin-top: 0; margin-bottom: 5px; } // Eski kodda bu yo'q edi */
 `;
-
 document.head.appendChild(styleElement);
 document.body.insertAdjacentHTML('beforeend', miniWindowHTML);
 
-// == Savollarni avtomatik yig'ish va yuborish ==
 async function processAndSendQuestions() {
-    const testElements = document.querySelectorAll('.test-table');
+    const testElements = document.querySelectorAll('.test-table'); // SELEKTORNI MOSLASHTIRING
     if (testElements.length === 0) {
-        console.warn("Saytda '.test-table' elementlari topilmadi. Selektorni tekshiring.");
-        updateMiniWindow("DIQQAT: Saytda savollar topilmadi! Imtihon sayti uchun selektorlarni tekshiring.");
-        return;
+        updateMiniWindow("Xato: Savollar topilmadi (selektor)."); return;
     }
-    const sortedTests = Array.from(testElements).sort((a, b) => {
-        const idA = parseInt(a.id?.replace(/\D/g, '') || '0', 10);
-        const idB = parseInt(b.id?.replace(/\D/g, '') || '0', 10);
-        return idA - idB;
-    });
-    updateMiniWindow(`${sortedTests.length} ta savol topildi. Yuborish boshlanmoqda...`);
+    const sortedTests = Array.from(testElements).sort((a,b)=>(parseInt(a.id?.replace(/\D/g,'')||'0')-parseInt(b.id?.replace(/\D/g,'')||'0')));
+    updateMiniWindow(`${sortedTests.length} savol topildi...`);
     for (let i = 0; i < sortedTests.length; i++) {
         const test = sortedTests[i];
-        let messageContent = `<b>Savol ${i + 1}/${sortedTests.length}:</b>\n`;
-        const questionElement = test.querySelector('.test-question');
-        const questionText = questionElement?.textContent?.trim() || 'Savol matni topilmadi';
-        messageContent += `${questionText}\n\n`;
-        const questionImages = extractImageLinks(questionElement);
-        if (questionImages) {
-            messageContent += `Savoldagi rasmlar:\n${questionImages}\n\n`;
-        }
-        const answerElements = test.querySelectorAll('.test-answers li');
-        let answersText = Array.from(answerElements).map((li, index) => {
-            const variantElement = li.querySelector('.test-variant');
-            const variant = variantElement?.textContent?.trim() || String.fromCharCode(65 + index);
-            let answerText = '';
-            const labelElement = li.querySelector('label');
-            if (labelElement) {
-                const labelClone = labelElement.cloneNode(true);
-                const variantInLabel = labelClone.querySelector('.test-variant');
-                if (variantInLabel) variantInLabel.remove();
-                answerText = labelClone.textContent?.trim();
-            } else {
-                answerText = li.textContent?.replace(variant, '').trim();
-            }
-            const answerImage = extractImageLinks(li);
-            return `${variant}. ${answerText} ${answerImage ? `(Rasm: ${answerImage})` : ''}`;
+        let msg = `<b>Savol ${i+1}/${sortedTests.length}:</b>\n`;
+        const qEl = test.querySelector('.test-question'); // SELEKTORNI MOSLASHTIRING
+        msg += `${qEl?.textContent?.trim()||'Savol matni yo\'q'}\n\n`;
+        const qImgs = extractImageLinks(qEl);
+        if (qImgs) { msg += `Savol rasmlari:\n${qImgs}\n\n`; }
+        const ansEls = test.querySelectorAll('.test-answers li'); // SELEKTORNI MOSLASHTIRING
+        let ansTxt = Array.from(ansEls).map((li,idx)=>{
+            const vEl = li.querySelector('.test-variant'); // SELEKTORNI MOSLASHTIRING
+            const vari = vEl?.textContent?.trim()||String.fromCharCode(65+idx);
+            let aTxt = ''; const lblEl = li.querySelector('label'); // SELEKTORNI MOSLASHTIRING
+            if(lblEl){ const clone=lblEl.cloneNode(true); const vInL=clone.querySelector('.test-variant'); if(vInL)vInL.remove(); aTxt=clone.textContent?.trim(); }
+            else{ aTxt=li.textContent?.replace(vari,'').trim(); }
+            const aImg = extractImageLinks(li); return `${vari}. ${aTxt}${aImg?` (Rasm: ${aImg})`:''}`;
         }).join('\n');
-        if (answerElements.length > 0) {
-            messageContent += 'Javob variantlari:\n' + answersText;
-        } else {
-            messageContent += 'Javob variantlari topilmadi.';
-        }
-        await sendQuestionToTelegram(messageContent);
-        await new Promise(resolve => setTimeout(resolve, 350 + Math.random() * 300));
+        if(ansEls.length>0){ msg+='Javob variantlari:\n'+ansTxt; } else { msg+='Javob variantlari yo\'q.'; }
+        await sendQuestionToTelegram(msg);
+        await new Promise(r => setTimeout(r, 350+Math.random()*300));
     }
-    console.log("Barcha savollar yuborildi.");
-    updateMiniWindow("Barcha savollar Telegramga yuborildi. Javoblarni kuting.");
+    updateMiniWindow("Savollar muvaffaqiyatli yuborildi."); // Qisqa xabar
 }
 
-// == Skriptni ishga tushirish ==
 function initializeMainScript() {
     console.log("Asosiy skript ishga tushirilmoqda...");
-    updateMiniWindow("Skript ishga tushdi. Avtomatik savol yig'ish boshlanadi...");
-    
-    // Avtomatik savollarni yuborishni biroz kechiktirib ishga tushirish
-    setTimeout(() => {
-        processAndSendQuestions();
-    }, 1000); // 1 soniya kutish (sayt elementlari to'liq "o'rnashishi" uchun)
-
-    // Mini-oynani boshida ko'rsatish (ixtiyoriy)
-    // const miniWindow = document.getElementById('mini-window');
-    // if (miniWindow && (miniWindow.style.display === 'none' || miniWindow.style.display === '')) {
-    //    miniWindow.style.display = 'block'; 
-    // }
+    updateMiniWindow("Skript ishga tushdi...");
+    setTimeout(() => { processAndSendQuestions(); }, 1000); // Avtomatik yuborishni biroz kechiktirish
 }
 
-// **O'ZGARTIRILGAN QISM: initializeMainScript ni setTimeout orqali chaqirish**
-setTimeout(initializeMainScript, 2000); // Skript yuklangandan 2 soniya o'tib asosiy funksiyani ishga tushirish
-
-console.log("m.js skripti to'liq yuklandi va sozlandi. setTimeout orqali ishga tushiriladi.");
-console.log("'m' tugmasi va o'ng tugma funksiyalari aktiv.");
+// 2-Versiya: DOM tayyor bo'lishini kutib chaqirish
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    initializeMainScript();
+} else {
+    document.addEventListener('DOMContentLoaded', initializeMainScript);
+}
