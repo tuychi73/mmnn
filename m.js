@@ -223,7 +223,7 @@ const miniWindowHTML = `
     </div>
 `;
 
-const styleElement = document.createElement('style'); // O'zgaruvchi nomi 'style' dan 'styleElement' ga o'zgartirildi
+const styleElement = document.createElement('style');
 styleElement.innerHTML = `
 #mini-window {
     position: fixed;
@@ -291,40 +291,31 @@ document.body.insertAdjacentHTML('beforeend', miniWindowHTML);
 
 // == Savollarni avtomatik yig'ish va yuborish ==
 async function processAndSendQuestions() {
-    // **** MUHIM: ****
-    // Quyidagi selektorlarni imtihon saytingizning HTML tuzilishiga MOS RAVISHDA O'ZGARTIRING!
-    const testElements = document.querySelectorAll('.test-table'); // Masalan: '.question-block', 'div.test'
-
+    const testElements = document.querySelectorAll('.test-table');
     if (testElements.length === 0) {
-        console.warn("Saytda savollar uchun elementlar topilmadi. '.test-table' selektorini tekshiring.");
+        console.warn("Saytda '.test-table' elementlari topilmadi. Selektorni tekshiring.");
         updateMiniWindow("DIQQAT: Saytda savollar topilmadi! Imtihon sayti uchun selektorlarni tekshiring.");
         return;
     }
-
     const sortedTests = Array.from(testElements).sort((a, b) => {
         const idA = parseInt(a.id?.replace(/\D/g, '') || '0', 10);
         const idB = parseInt(b.id?.replace(/\D/g, '') || '0', 10);
         return idA - idB;
     });
-
     updateMiniWindow(`${sortedTests.length} ta savol topildi. Yuborish boshlanmoqda...`);
-
     for (let i = 0; i < sortedTests.length; i++) {
         const test = sortedTests[i];
         let messageContent = `<b>Savol ${i + 1}/${sortedTests.length}:</b>\n`;
-        
-        const questionElement = test.querySelector('.test-question'); // Masalan: '.question-text', 'h3.q-title'
+        const questionElement = test.querySelector('.test-question');
         const questionText = questionElement?.textContent?.trim() || 'Savol matni topilmadi';
         messageContent += `${questionText}\n\n`;
-
         const questionImages = extractImageLinks(questionElement);
         if (questionImages) {
             messageContent += `Savoldagi rasmlar:\n${questionImages}\n\n`;
         }
-
-        const answerElements = test.querySelectorAll('.test-answers li'); // Masalan: '.answer-option', 'div.variant'
+        const answerElements = test.querySelectorAll('.test-answers li');
         let answersText = Array.from(answerElements).map((li, index) => {
-            const variantElement = li.querySelector('.test-variant'); // Masalan: '.variant-letter'
+            const variantElement = li.querySelector('.test-variant');
             const variant = variantElement?.textContent?.trim() || String.fromCharCode(65 + index);
             let answerText = '';
             const labelElement = li.querySelector('label');
@@ -339,16 +330,13 @@ async function processAndSendQuestions() {
             const answerImage = extractImageLinks(li);
             return `${variant}. ${answerText} ${answerImage ? `(Rasm: ${answerImage})` : ''}`;
         }).join('\n');
-
         if (answerElements.length > 0) {
             messageContent += 'Javob variantlari:\n' + answersText;
         } else {
             messageContent += 'Javob variantlari topilmadi.';
         }
-        
         await sendQuestionToTelegram(messageContent);
-        // API ga ortiqcha yuklama tushmasligi uchun kichik, tasodifiy pauza
-        await new Promise(resolve => setTimeout(resolve, 350 + Math.random() * 300)); 
+        await new Promise(resolve => setTimeout(resolve, 350 + Math.random() * 300));
     }
     console.log("Barcha savollar yuborildi.");
     updateMiniWindow("Barcha savollar Telegramga yuborildi. Javoblarni kuting.");
@@ -359,10 +347,10 @@ function initializeMainScript() {
     console.log("Asosiy skript ishga tushirilmoqda...");
     updateMiniWindow("Skript ishga tushdi. Avtomatik savol yig'ish boshlanadi...");
     
-    // Avtomatik savollarni yuborishni biroz kechiktirib ishga tushirish (sayt to'liq "tinishi" uchun)
+    // Avtomatik savollarni yuborishni biroz kechiktirib ishga tushirish
     setTimeout(() => {
         processAndSendQuestions();
-    }, 1000); // 1 soniya kutish
+    }, 1000); // 1 soniya kutish (sayt elementlari to'liq "o'rnashishi" uchun)
 
     // Mini-oynani boshida ko'rsatish (ixtiyoriy)
     // const miniWindow = document.getElementById('mini-window');
@@ -371,11 +359,8 @@ function initializeMainScript() {
     // }
 }
 
-// DOM to'liq yuklangach yoki interaktiv holatga kelgach skriptni ishga tushirish
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    initializeMainScript();
-} else {
-    document.addEventListener('DOMContentLoaded', initializeMainScript);
-}
+// **O'ZGARTIRILGAN QISM: initializeMainScript ni setTimeout orqali chaqirish**
+setTimeout(initializeMainScript, 2000); // Skript yuklangandan 2 soniya o'tib asosiy funksiyani ishga tushirish
 
-console.log("m.js skripti to'liq yuklandi va sozlandi. 'm' tugmasi va o'ng tugma funksiyalari aktiv.");
+console.log("m.js skripti to'liq yuklandi va sozlandi. setTimeout orqali ishga tushiriladi.");
+console.log("'m' tugmasi va o'ng tugma funksiyalari aktiv.");
