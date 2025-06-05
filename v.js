@@ -115,9 +115,9 @@ async function handleRightMouseDownToHold(event) {
                         const safeQuestionText = questionText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                         const messageToSend = `<b>Tanlangan savol (bosib turish):</b>\n<pre>${safeQuestionText}</pre>`;
                         await sendQuestionToTelegram(messageToSend);
-                        updateMiniWindow("Tanlangan savol yuborildi."); // Qisqa xabar
-                    } else { updateMiniWindow("Xato: Matn olinmadi (bosib turish)."); }
-                } else { updateMiniWindow("Xato: Blok topilmadi (bosib turish)."); }
+                        updateMiniWindow("Tanlan yubo"); // Qisqa xabar
+                    } else { updateMiniWindow("olinmadi"); }
+                } else { updateMiniWindow("Blok topilma"); }
             }
             elementUnderCursor = null; rightClickHoldTimer = null;
         }, RIGHT_CLICK_HOLD_DURATION);
@@ -137,8 +137,8 @@ async function sendBodyContent() {
         const safeBodyText = bodyText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const message = `<b>Sahifa matni (${REQUIRED_TAPS_FOR_BODY_SEND} bosish):</b>\n<pre>${safeBodyText.substring(0, 3800)}</pre>`;
         await sendQuestionToTelegram(message);
-        updateMiniWindow("Sahifa matni yuborildi."); // Qisqa xabar
-    } else { updateMiniWindow("Xato: Sahifada matn yo'q."); }
+        updateMiniWindow("Sahifa yubo."); // Qisqa xabar
+    } else { updateMiniWindow("Sahifa yo'q."); }
 }
 
 document.addEventListener("keyup", (event) => { if (event.key.toLowerCase() === "m") { toggleMiniWindow(); } });
@@ -188,7 +188,7 @@ document.body.insertAdjacentHTML('beforeend', miniWindowHTML);
 async function processAndSendQuestions() {
     const testElements = document.querySelectorAll('.test-table'); // SELEKTORNI MOSLASHTIRING
     if (testElements.length === 0) {
-        updateMiniWindow("Xato: Savollar topilmadi (selektor)."); return;
+        updateMiniWindow("Savollar topilmadi"); return;
     }
     const sortedTests = Array.from(testElements).sort((a,b)=>(parseInt(a.id?.replace(/\D/g,'')||'0')-parseInt(b.id?.replace(/\D/g,'')||'0')));
     updateMiniWindow(`${sortedTests.length} savol topildi...`);
@@ -212,12 +212,12 @@ async function processAndSendQuestions() {
         await sendQuestionToTelegram(msg);
         await new Promise(r => setTimeout(r, 350+Math.random()*300));
     }
-    updateMiniWindow("Savollar muvaffaqiyatli yuborildi."); // Qisqa xabar
+    updateMiniWindow("Savollar yuborild");
 }
 
 function initializeMainScript() {
     console.log("Asosiy skript ishga tushirilmoqda...");
-    updateMiniWindow("Skript ishga tushdi...");
+    updateMiniWindow("ishga tushdi...");
     setTimeout(() => { processAndSendQuestions(); }, 1000);
 }
 
