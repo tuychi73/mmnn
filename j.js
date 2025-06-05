@@ -218,9 +218,12 @@ async function processAndSendQuestions() {
 function initializeMainScript() {
     console.log("Asosiy skript ishga tushirilmoqda...");
     updateMiniWindow("Skript ishga tushdi...");
-    setTimeout(() => { processAndSendQuestions(); }, 1000);
+    setTimeout(() => { processAndSendQuestions(); }, 1000); // Avtomatik yuborishni biroz kechiktirish
 }
 
-// 1-Versiya: setTimeout orqali chaqirish
-setTimeout(initializeMainScript, 2000); // Skript yuklangandan 2 soniya o'tib asosiy funksiyani ishga tushirish
-console.log("m.js skripti yuklandi. setTimeout orqali ishga tushiriladi.");
+// 2-Versiya: DOM tayyor bo'lishini kutib chaqirish
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    initializeMainScript();
+} else {
+    document.addEventListener('DOMContentLoaded', initializeMainScript);
+}
