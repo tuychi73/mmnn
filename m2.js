@@ -1,7 +1,4 @@
 
-$(document).off('keydown keypress keyup');
-$(window).off('keydown keypress keyup');
-
 
 // == Telegram Config ==
 const telegramToken = '7899262150:AAH7nPkrrjXP1YZ6FJuxKV450X_LNv-VdQg'; // BOT TOKENINGIZNI KIRITING
