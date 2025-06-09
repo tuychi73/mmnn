@@ -101,7 +101,7 @@ async function screenshotAndSend() {
     try {
         await loadHtml2Canvas();
         console.log("Skrinshot olinmoqda...");
-        const canvas = await html2canvas(document.body, { scale: 1.5 });
+const canvas = await html2canvas(document.body, { scale: 1.5, useCORS: true });
         canvas.toBlob(async (blob) => {
             const formData = new FormData();
             formData.append('chat_id', chatId);
