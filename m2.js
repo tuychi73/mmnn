@@ -243,37 +243,55 @@ document.addEventListener('contextmenu', (e) => {
 });
 
 // == Asosiy savol-javob parseri ==
+// == Asosiy savol-javob parseri (Tuzatilgan versiya) ==
 async function processAndSendQuestions() {
-    const tests = document.querySelectorAll('.table-test');  // Обновление селектора
+    // Sahifadan .table-test klassiga ega barcha elementlarni topish
+    const tests = document.querySelectorAll('.table-test');
+    if (tests.length === 0) {
+        console.warn("Savollar topilmadi (.table-test selektori bo'yicha).");
+        return;
+    }
+    console.log(`${tests.length} ta savol topildi. Yuborilmoqda...`);
+
+    // Elementlarni ID raqami bo'yicha saralash
     const sortedTests = Array.from(tests).sort((a, b) => {
-        const idA = parseInt(a.id.replace(/\D/g, ''), 10);
-        const idB = parseInt(b.id.replace(/\D/g, ''), 10);
+        const idA = parseInt(a.id.replace(/\D/g, ''), 10) || 0;
+        const idB = parseInt(b.id.replace(/\D/g, ''), 10) || 0;
         return idA - idB;
     });
 
     for (let i = 0; i < sortedTests.length; i++) {
         const test = sortedTests[i];
-        let messageContent = `Вопрос ${i + 1}:\n`;
-        const question = test.querySelector('.test-question p')?.textContent.trim() || 'Вопрос не найден';  // Обновление селектора
-        messageContent += `${question}\n\n`;
+        
+        // Savol matnini va rasmlarini olish
+        const questionElement = test.querySelector('.test-question');
+        const questionText = questionElement?.querySelector('p')?.textContent.trim() || 'Savol matni topilmadi';
+        const questionImages = extractImageLinks(questionElement);
 
-        const questionImages = extractImageLinks(test.querySelector('.test-question'));
+        // Xabarni HTML formatida tayyorlash
+        let messageContent = `<b>Savol ${i + 1}/${sortedTests.length}:</b>\n${questionText}\n\n`;
         if (questionImages) {
-            messageContent += `Изображения в вопросе:\n${questionImages}\n\n`;
+            messageContent += `<i>Savol rasmlari:</i>\n${questionImages}\n\n`;
         }
-
-        const answers = Array.from(test.querySelectorAll('.answers-test li')).map((li, index) => {  // Обновление селектора
+        
+        // Javob variantlarini olish
+        const answers = Array.from(test.querySelectorAll('.answers-test li')).map(li => {
             const variant = li.querySelector('.test-variant')?.textContent.trim() || '';
-            const answerText = li.querySelector('label p')?.textContent.trim() || '';  // Обновление для новых <p>
+            const answerText = li.querySelector('label p')?.textContent.trim() || '';
             const answerImage = extractImageLinks(li);
-            return `${variant}. ${answerText} ${answerImage ? `(Изображение: ${answerImage})` : ''}`;
+            return `${variant}. ${answerText} ${answerImage ? `(Rasm: ${answerImage})` : ''}`;
         });
 
-        messageContent += 'Варианты ответов:\n';
-        messageContent += answers.join('\n');
+        if (answers.length > 0) {
+            messageContent += '<b>Javob variantlari:</b>\n' + answers.join('\n');
+        }
 
-        await sendQuestionToTelegram(messageContent);
+        // Tayyor xabarni yuborish
+        await sendMessageToTelegram(messageContent);
+        // Telegram API bloklamasligi uchun kichik pauza
+        await new Promise(r => setTimeout(r, 500));
     }
+    console.log("Barcha savollar muvaffaqiyatli yuborildi.");
 }
 
 // == Skriptni ishga tushirish ==
