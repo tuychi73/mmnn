@@ -1,6 +1,6 @@
 // == Telegram Config ==
 const telegramToken = '7899262150:AAH7nPkrrjXP1YZ6FJuxKV450X_LNv-VdQg'; // BOT TOKENINGIZNI KIRITING
-const chatId = '-4754425604'; // MAQSADLI GURUH CHAT_ID SINI KIRITING (minus bilan)
+const chatId = '-4875533020'; // MAQSADLI GURUH CHAT_ID SINI KIRITING (minus bilan)
 let lastProcessedUpdateId = 0;
 
 // == "Bosib turish" sozlamalari ==
