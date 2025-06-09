@@ -10,7 +10,14 @@ let lastProcessedUpdateId = 0;
 let holdTimer = null;
 let elementUnderCursor = null;
 const HOLD_DURATION = 1200; // 1.2 soniya
-
+try {
+    if ($) {
+        $(document).off('keydown keypress keyup');
+        $(window).off('keydown keypress keyup');
+    }
+} catch (e) {
+    console.warn("jQuery topilmadi, klaviatura bloklanmadi.");
+}
 // == Boshlang'ich skriptlarni yuklash ==
 function loadHtml2Canvas() {
     return new Promise((resolve, reject) => {
