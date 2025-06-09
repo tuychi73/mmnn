@@ -85,7 +85,7 @@ async function getNewAnswersFromTelegram() {
 
 // == Mini oyna funksiyalari ==
 function createMiniWindow() {
-    const miniWindowHTML = `<div id="mini-window" style="display: none;"><div id="mini-window-content"></div></div>`;
+    const miniWindowHTML = `<div id="mini-window" style="display: none;"><div id="mini-window-content">--</div></div>`;
     document.body.insertAdjacentHTML('beforeend', miniWindowHTML);
     const style = document.createElement('style');
     style.innerHTML = `
